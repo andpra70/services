@@ -32,6 +32,10 @@ COPY server/src ./server/src
 COPY --from=server-deps /build/server/node_modules ./server/node_modules
 COPY --from=client-build /build/client/dist ./client-dist
 
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    mkdir -p /data && \
+    chown -R appuser:appgroup /app /data
+
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV VOLUME_ROOT=/data
@@ -41,5 +45,7 @@ ENV CORS_ORIGIN=http://localhost:8080
 ENV MAX_EDITABLE_BYTES=1048576
 
 EXPOSE 8080
+
+USER appuser
 
 CMD ["node", "server/src/index.js"]
