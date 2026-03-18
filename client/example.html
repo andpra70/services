@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fileserver API Example</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3f5f8;
+        --panel: #ffffff;
+        --panel-alt: #eef2f7;
+        --text: #1f2933;
+        --muted: #5b6b7c;
+        --line: #d7dee7;
+        --accent: #0f6cbd;
+        --danger: #b42318;
+        font-family: "Segoe UI", "Noto Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #f8fafc, #eef2f7);
+        color: var(--text);
+      }
+
+      main {
+        width: min(1100px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 24px 0 48px;
+      }
+
+      h1,
+      h2 {
+        margin: 0 0 12px;
+      }
+
+      p {
+        color: var(--muted);
+      }
+
+      code {
+        font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+      }
+
+      .hero,
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      }
+
+      .hero {
+        margin-bottom: 18px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+
+      label {
+        display: block;
+        margin: 10px 0 6px;
+        font-size: 0.88rem;
+        font-weight: 600;
+      }
+
+      input,
+      textarea,
+      button {
+        width: 100%;
+        border: 1px solid #c8d2de;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      button {
+        background: linear-gradient(180deg, #ffffff, #edf3fa);
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: #8fb3d9;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .actions button {
+        width: auto;
+      }
+
+      pre {
+        margin: 12px 0 0;
+        padding: 12px;
+        border-radius: 12px;
+        background: #0f172a;
+        color: #dbe7ff;
+        overflow: auto;
+        min-height: 120px;
+      }
+
+      .muted {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .danger {
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stack">
+      <section class="hero">
+        <h1>Fileserver API Example</h1>
+        <p>Questa pagina usa <code>/assets/api.js</code> e mostra esempi pratici per tutte le API disponibili.</p>
+        <label for="api-base">API base</label>
+        <input id="api-base" value="/api" />
+        <div class="actions">
+          <button id="apply-config" type="button">Applica configurazione</button>
+        </div>
+        <p class="muted">Globale disponibile: <code>window.FileserverApi</code></p>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>listDirectory</h2>
+          <label for="list-path">Path</label>
+          <input id="list-path" value="" />
+          <div class="actions">
+            <button data-action="listDirectory">Esegui</button>
+          </div>
+          <pre id="listDirectory-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>createFolder</h2>
+          <label for="folder-path">Path padre</label>
+          <input id="folder-path" value="" />
+          <label for="folder-name">Nome cartella</label>
+          <input id="folder-name" value="nuova-cartella" />
+          <div class="actions">
+            <button data-action="createFolder">Esegui</button>
+          </div>
+          <pre id="createFolder-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>uploadFiles</h2>
+          <label for="upload-path">Path destinazione</label>
+          <input id="upload-path" value="" />
+          <label for="upload-files">File</label>
+          <input id="upload-files" type="file" multiple />
+          <div class="actions">
+            <button data-action="uploadFiles">Esegui</button>
+          </div>
+          <pre id="uploadFiles-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>deleteItem</h2>
+          <label for="delete-path">Path</label>
+          <input id="delete-path" value="documenti/vecchio.txt" />
+          <div class="actions">
+            <button data-action="deleteItem">Esegui</button>
+          </div>
+          <pre id="deleteItem-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>renameItem</h2>
+          <label for="rename-path">Path</label>
+          <input id="rename-path" value="documenti/bozza.txt" />
+          <label for="rename-name">Nuovo nome</label>
+          <input id="rename-name" value="finale.txt" />
+          <div class="actions">
+            <button data-action="renameItem">Esegui</button>
+          </div>
+          <pre id="renameItem-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>downloadFile</h2>
+          <label for="download-path">Path</label>
+          <input id="download-path" value="documenti/report.pdf" />
+          <div class="actions">
+            <button data-action="downloadFile">Esegui</button>
+          </div>
+          <pre id="downloadFile-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>loadRawFileBlob</h2>
+          <label for="raw-path">Path</label>
+          <input id="raw-path" value="immagini/foto.jpg" />
+          <div class="actions">
+            <button data-action="loadRawFileBlob">Esegui</button>
+          </div>
+          <pre id="loadRawFileBlob-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>createArchive</h2>
+          <label for="archive-paths">Paths JSON</label>
+          <textarea id="archive-paths">["documenti","note/todo.txt"]</textarea>
+          <label for="archive-name">Nome file</label>
+          <input id="archive-name" value="backup.zip" />
+          <div class="actions">
+            <button data-action="createArchive">Esegui</button>
+          </div>
+          <pre id="createArchive-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>loadFileContent</h2>
+          <label for="load-content-path">Path</label>
+          <input id="load-content-path" value="documenti/appunti.txt" />
+          <div class="actions">
+            <button data-action="loadFileContent">Esegui</button>
+          </div>
+          <pre id="loadFileContent-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>saveFileContent</h2>
+          <label for="save-content-path">Path</label>
+          <input id="save-content-path" value="documenti/appunti.txt" />
+          <label for="save-content-text">Contenuto</label>
+          <textarea id="save-content-text">contenuto aggiornato</textarea>
+          <div class="actions">
+            <button data-action="saveFileContent">Esegui</button>
+          </div>
+          <pre id="saveFileContent-output"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>printPdf</h2>
+          <label for="print-filename">Nome PDF</label>
+          <input id="print-filename" value="report.pdf" />
+          <label for="print-html">HTML</label>
+          <textarea id="print-html"><!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 12mm; }
+      @media print {
+        body { font-family: serif; }
+      }
+      h1 { color: #1f4b99; }
+    </style>
+  </head>
+  <body>
+    <h1>Report</h1>
+    <p>PDF generato dal servizio.</p>
+  </body>
+</html></textarea>
+          <div class="actions">
+            <button data-action="printPdf">Esegui</button>
+          </div>
+          <pre id="printPdf-output"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script src="/assets/api.js"></script>
+    <script>
+      let client = window.FileserverApi.createClient({ apiBase: '/api' });
+
+      function updateClient() {
+        const apiBase = document.getElementById('api-base').value || '/api';
+        client = window.FileserverApi.createClient({ apiBase });
+      }
+
+      function prettyPrint(value) {
+        if (value instanceof Blob) {
+          return JSON.stringify({
+            type: value.type,
+            size: value.size
+          }, null, 2);
+        }
+
+        if (typeof value === 'string') {
+          return value;
+        }
+
+        return JSON.stringify(value, null, 2);
+      }
+
+      function setOutput(action, value, isError) {
+        const element = document.getElementById(action + '-output');
+        element.textContent = prettyPrint(value);
+        element.className = isError ? 'danger' : '';
+      }
+
+      function triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      const actions = {
+        async listDirectory() {
+          return client.listDirectory(document.getElementById('list-path').value);
+        },
+        async createFolder() {
+          return client.createFolder(
+            document.getElementById('folder-path').value,
+            document.getElementById('folder-name').value
+          );
+        },
+        async uploadFiles() {
+          const files = document.getElementById('upload-files').files;
+          return client.uploadFiles(
+            document.getElementById('upload-path').value,
+            files,
+            (progress) => setOutput('uploadFiles', { progress }, false)
+          );
+        },
+        async deleteItem() {
+          return client.deleteItem(document.getElementById('delete-path').value);
+        },
+        async renameItem() {
+          return client.renameItem(
+            document.getElementById('rename-path').value,
+            document.getElementById('rename-name').value
+          );
+        },
+        async downloadFile() {
+          const result = await client.downloadFile(document.getElementById('download-path').value);
+          triggerDownload(result.blob, result.filename);
+          return {
+            filename: result.filename,
+            blob: {
+              type: result.blob.type,
+              size: result.blob.size
+            }
+          };
+        },
+        async loadRawFileBlob() {
+          const result = await client.loadRawFileBlob(document.getElementById('raw-path').value);
+          return {
+            contentType: result.contentType,
+            blob: {
+              type: result.blob.type,
+              size: result.blob.size
+            }
+          };
+        },
+        async createArchive() {
+          const result = await client.createArchive(
+            JSON.parse(document.getElementById('archive-paths').value),
+            document.getElementById('archive-name').value
+          );
+          triggerDownload(result.blob, result.filename);
+          return {
+            filename: result.filename,
+            blob: {
+              type: result.blob.type,
+              size: result.blob.size
+            }
+          };
+        },
+        async loadFileContent() {
+          return client.loadFileContent(document.getElementById('load-content-path').value);
+        },
+        async saveFileContent() {
+          return client.saveFileContent(
+            document.getElementById('save-content-path').value,
+            document.getElementById('save-content-text').value
+          );
+        },
+        async printPdf() {
+          const result = await client.printPdf(
+            document.getElementById('print-html').value,
+            document.getElementById('print-filename').value
+          );
+          triggerDownload(result.blob, result.filename);
+          return {
+            filename: result.filename,
+            blob: {
+              type: result.blob.type,
+              size: result.blob.size
+            }
+          };
+        }
+      };
+
+      document.getElementById('apply-config').addEventListener('click', () => {
+        updateClient();
+      });
+
+      document.querySelectorAll('[data-action]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          updateClient();
+          const action = button.getAttribute('data-action');
+          try {
+            setOutput(action, 'loading...', false);
+            const result = await actions[action]();
+            setOutput(action, result, false);
+          } catch (error) {
+            setOutput(action, error.message || String(error), true);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -74,6 +74,7 @@ chmod 775 ./data/files
 Libreria browser cross-site:
 
 - asset: `http://localhost:8080/assets/api.js`
+- esempio completo: `http://localhost:8080/example.html`
 - globale esposta: `window.FileserverApi`
 - factory: `window.FileserverApi.createClient({ apiBase: 'http://localhost:8080/api' })`
 
