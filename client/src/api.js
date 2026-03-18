@@ -130,3 +130,16 @@ export function saveFileContent(path, content) {
     body: JSON.stringify({ path, content }),
   });
 }
+
+export async function printPdf(html, filename = 'document.pdf') {
+  const res = await api('/print-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html, filename }),
+  });
+
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get('content-disposition') || '';
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return { blob, filename: match?.[1] || filename };
+}

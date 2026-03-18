@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { renderPdfFromHtml } from './pdf.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -366,6 +367,19 @@ app.put('/api/file-content', async (req, res) => {
 
     await fs.writeFile(fileAbs, content, 'utf8');
     res.json({ ok: true });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+app.post('/api/print-pdf', async (req, res) => {
+  try {
+    const { html, filename } = req.body || {};
+    const { filename: pdfFilename, pdfBuffer } = await renderPdfFromHtml(html, { filename });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${pdfFilename}"`);
+    res.send(pdfBuffer);
   } catch (err) {
     sendError(res, err, 400);
   }

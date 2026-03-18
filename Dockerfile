@@ -31,6 +31,8 @@ WORKDIR /app
 ARG APP_UID=1000
 ARG APP_GID=1000
 
+RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto
+
 COPY server/package.json ./server/package.json
 COPY server/src ./server/src
 COPY --from=server-deps /build/server/node_modules ./server/node_modules
@@ -46,6 +48,7 @@ ENV CLIENT_DIST=/app/client-dist
 ENV APP_BASE=/
 ENV CORS_ORIGIN=http://localhost:8080
 ENV MAX_EDITABLE_BYTES=1048576
+ENV CHROMIUM_BIN=/usr/bin/chromium-browser
 
 EXPOSE 8080
 

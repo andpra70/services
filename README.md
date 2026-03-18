@@ -210,12 +210,45 @@ Salva il contenuto testuale di un file esistente.
 client.saveFileContent('documenti/appunti.txt', 'contenuto aggiornato').then(console.log);
 ```
 
+#### `printPdf(html, filename)`
+
+Genera un PDF a partire da un documento HTML. Il rendering usa Chromium in media print e applica CSS interni, `@page`, `@media print`, font e formati pagina definiti nel markup.
+
+```js
+client.printPdf(`
+  <!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: A4; margin: 12mm; }
+        @media print {
+          body { font-family: serif; }
+        }
+        h1 { color: #1f4b99; }
+      </style>
+    </head>
+    <body>
+      <h1>Report</h1>
+      <p>PDF generato dal servizio.</p>
+    </body>
+  </html>
+`, 'report.pdf').then(({ blob, filename }) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+});
+```
+
 ### Note integrazione
 
 - La libreria e' servita da `GET /assets/api.js`.
 - L'asset viene esposto con `Access-Control-Allow-Origin: *`.
 - Le API usano base configurabile tramite `createClient({ apiBase })`.
-- Le operazioni `downloadFile`, `loadRawFileBlob` e `createArchive` restituiscono `Blob`.
+- Le operazioni `downloadFile`, `loadRawFileBlob`, `createArchive` e `printPdf` restituiscono `Blob`.
 
 ## API principali
 
@@ -229,6 +262,7 @@ client.saveFileContent('documenti/appunti.txt', 'contenuto aggiornato').then(con
 - `POST /api/folder`
 - `GET /api/file-content?path=`
 - `PUT /api/file-content`
+- `POST /api/print-pdf`
 
 ## Note di sicurezza
 

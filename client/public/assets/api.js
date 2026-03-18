@@ -145,6 +145,18 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: path, content: content })
         });
+      },
+      printPdf: async function (html, filename) {
+        var response = await api('/print-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html: html, filename: filename || 'document.pdf' })
+        });
+
+        return {
+          blob: await response.blob(),
+          filename: parseFilename(response.headers.get('content-disposition'), filename || 'document.pdf')
+        };
       }
     };
   }
