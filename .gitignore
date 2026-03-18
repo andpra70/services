@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# build output
+client/dist/
+
+# env files
+server/.env
+.env
+
+# misc
+.DS_Store
+npm-debug.log*
+
+# oauth data
+oauth-server/data/*.db
+oauth-server/data/*.db-*
