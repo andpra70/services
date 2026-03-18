@@ -67,6 +67,146 @@ Libreria browser cross-site:
 - globale esposta: `window.FileserverApi`
 - factory: `window.FileserverApi.createClient({ apiBase: 'http://localhost:8080/api' })`
 
+## Integrazione Web
+
+### Caricamento libreria
+
+```html
+<script src="http://localhost:8080/assets/api.js"></script>
+<script>
+  const client = window.FileserverApi.createClient({
+    apiBase: 'http://localhost:8080/api'
+  });
+</script>
+```
+
+### Esempio iniziale
+
+```html
+<script src="http://localhost:8080/assets/api.js"></script>
+<script>
+  const client = window.FileserverApi.createClient({
+    apiBase: 'http://localhost:8080/api'
+  });
+
+  client.listDirectory('').then((result) => {
+    console.log('Root:', result);
+  });
+</script>
+```
+
+### API JavaScript disponibili
+
+#### `listDirectory(relativePath)`
+
+Lista file e cartelle della directory richiesta.
+
+```js
+client.listDirectory('documenti').then(console.log);
+```
+
+#### `createFolder(path, name)`
+
+Crea una cartella sotto il path indicato.
+
+```js
+client.createFolder('documenti', 'nuova-cartella').then(console.log);
+```
+
+#### `uploadFiles(path, files, onProgress)`
+
+Carica uno o piu file con callback di avanzamento.
+
+```html
+<input id="files" type="file" multiple />
+<script>
+  const input = document.getElementById('files');
+
+  input.addEventListener('change', async () => {
+    await client.uploadFiles('upload', input.files, (progress) => {
+      console.log('progress', progress);
+    });
+  });
+</script>
+```
+
+#### `deleteItem(path)`
+
+Elimina file o cartella.
+
+```js
+client.deleteItem('documenti/vecchio.txt').then(console.log);
+```
+
+#### `renameItem(path, newName)`
+
+Rinomina un file o una cartella.
+
+```js
+client.renameItem('documenti/bozza.txt', 'finale.txt').then(console.log);
+```
+
+#### `downloadFile(path)`
+
+Scarica un file e restituisce `blob` e `filename`.
+
+```js
+client.downloadFile('documenti/report.pdf').then(({ blob, filename }) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+});
+```
+
+#### `loadRawFileBlob(path)`
+
+Legge il contenuto raw di un file per preview o embedding.
+
+```js
+client.loadRawFileBlob('immagini/foto.jpg').then(({ blob, contentType }) => {
+  console.log(contentType, blob);
+});
+```
+
+#### `createArchive(paths, archiveName)`
+
+Crea uno ZIP di file e cartelle.
+
+```js
+client.createArchive(
+  ['documenti', 'note/todo.txt'],
+  'backup.zip'
+).then(({ blob, filename }) => {
+  console.log(filename, blob);
+});
+```
+
+#### `loadFileContent(path)`
+
+Legge il contenuto testuale di un file.
+
+```js
+client.loadFileContent('documenti/appunti.txt').then(console.log);
+```
+
+#### `saveFileContent(path, content)`
+
+Salva il contenuto testuale di un file esistente.
+
+```js
+client.saveFileContent('documenti/appunti.txt', 'contenuto aggiornato').then(console.log);
+```
+
+### Note integrazione
+
+- La libreria e' servita da `GET /assets/api.js`.
+- L'asset viene esposto con `Access-Control-Allow-Origin: *`.
+- Le API usano base configurabile tramite `createClient({ apiBase })`.
+- Le operazioni `downloadFile`, `loadRawFileBlob` e `createArchive` restituiscono `Blob`.
+
 ## API principali
 
 - `GET /api/list?path=`
