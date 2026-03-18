@@ -32,7 +32,7 @@ WORKDIR /app
 ARG APP_UID=1000
 ARG APP_GID=1000
 
-RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto
+RUN apk add --no-cache weasyprint font-noto ttf-freefont
 
 COPY server/package.json ./server/package.json
 COPY server/src ./server/src
@@ -49,7 +49,7 @@ ENV CLIENT_DIST=/app/client-dist
 ENV APP_BASE=/
 ENV CORS_ORIGIN=http://localhost:8080
 ENV MAX_EDITABLE_BYTES=1048576
-ENV CHROMIUM_BIN=/usr/bin/chromium-browser
+ENV WEASYPRINT_BIN=/usr/bin/weasyprint
 
 EXPOSE 8080
 

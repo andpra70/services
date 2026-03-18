@@ -213,7 +213,7 @@ client.saveFileContent('documenti/appunti.txt', 'contenuto aggiornato').then(con
 
 #### `printPdf(html, filename)`
 
-Genera un PDF a partire da un documento HTML. Il rendering usa Chromium in media print e applica CSS interni, `@page`, `@media print`, font e formati pagina definiti nel markup.
+Genera un PDF a partire da un documento HTML. Il rendering usa media print e applica CSS interni, `@page`, `@media print`, font e formati pagina definiti nel markup.
 
 ```js
 client.printPdf(`

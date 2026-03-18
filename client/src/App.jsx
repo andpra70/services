@@ -7,6 +7,7 @@ import {
   listDirectory,
   loadFileContent,
   loadRawFileBlob,
+  moveItems,
   renameItem,
   saveFileContent,
   uploadFiles,
@@ -86,6 +87,18 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+function hasFilesInDataTransfer(dataTransfer) {
+  return Array.from(dataTransfer?.types || []).includes('Files');
+}
+
+function isInteractiveElement(target) {
+  return target instanceof Element && Boolean(target.closest('button, input, select, textarea, a, label'));
+}
+
+function rectsIntersect(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 function Icon({ name }) {
   const common = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
   const paths = {
@@ -121,10 +134,15 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
   const [dragActive, setDragActive] = useState(false);
+  const [draggingPaths, setDraggingPaths] = useState([]);
+  const [dropTargetPath, setDropTargetPath] = useState('');
+  const [selectionBox, setSelectionBox] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [previewSaving, setPreviewSaving] = useState(false);
   const [previewState, setPreviewState] = useState({ open: false, kind: null, path: '', content: '', error: '', objectUrl: '', editable: false });
   const filePickerRef = useRef(null);
+  const contentRef = useRef(null);
+  const suppressClickRef = useRef(false);
 
   const breadcrumb = useMemo(() => splitSegments(currentPath), [currentPath]);
 
@@ -175,6 +193,10 @@ export default function App() {
       return;
     }
     setSelectedPaths((prev) => [...new Set([...prev, ...visiblePaths])]);
+  }
+
+  function getDraggedPaths(itemPath) {
+    return selectedPaths.includes(itemPath) ? selectedPaths : [itemPath];
   }
 
   async function openFilePreview(item) {
@@ -344,11 +366,32 @@ export default function App() {
     }
   }
 
+  async function handleMove(targetPath, paths) {
+    if (!targetPath || !paths.length) return;
+
+    try {
+      setError('');
+      await moveItems(paths, targetPath);
+      setSelected(targetPath);
+      await refresh(currentPath);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDraggingPaths([]);
+      setDropTargetPath('');
+    }
+  }
+
   function stopRowClick(event) {
     event.stopPropagation();
   }
 
   function onDragOver(event) {
+    if (draggingPaths.length > 0) {
+      event.preventDefault();
+      return;
+    }
+    if (!hasFilesInDataTransfer(event.dataTransfer)) return;
     event.preventDefault();
     if (!dragActive) setDragActive(true);
   }
@@ -360,11 +403,139 @@ export default function App() {
   }
 
   async function onDrop(event) {
+    if (draggingPaths.length > 0) {
+      event.preventDefault();
+      setDropTargetPath('');
+      return;
+    }
+    if (!hasFilesInDataTransfer(event.dataTransfer)) return;
     event.preventDefault();
     setDragActive(false);
     const files = event.dataTransfer?.files;
     await handleUploadFromList(files);
   }
+
+  function updateSelectionFromRect(selectionRect) {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const rowNodes = content.querySelectorAll('tbody tr[data-row-path]');
+    const nextSelection = [];
+    rowNodes.forEach((row) => {
+      const rowRect = row.getBoundingClientRect();
+      if (rectsIntersect(selectionRect, rowRect)) {
+        const rowPath = row.getAttribute('data-row-path');
+        if (rowPath) nextSelection.push(rowPath);
+      }
+    });
+
+    setSelectedPaths(nextSelection);
+  }
+
+  function handleSelectionMouseDown(event) {
+    if (event.button !== 0 || draggingPaths.length > 0 || isInteractiveElement(event.target)) return;
+
+    const content = contentRef.current;
+    if (!content) return;
+
+    const originX = event.clientX;
+    const originY = event.clientY;
+
+    setSelectionBox({ left: originX, top: originY, width: 0, height: 0 });
+
+    const handleMouseMove = (moveEvent) => {
+      const nextLeft = Math.min(originX, moveEvent.clientX);
+      const nextTop = Math.min(originY, moveEvent.clientY);
+      const nextWidth = Math.abs(moveEvent.clientX - originX);
+      const nextHeight = Math.abs(moveEvent.clientY - originY);
+      const nextRect = {
+        left: nextLeft,
+        top: nextTop,
+        right: nextLeft + nextWidth,
+        bottom: nextTop + nextHeight,
+      };
+
+      if (nextWidth > 3 || nextHeight > 3) {
+        suppressClickRef.current = true;
+      }
+
+      setSelectionBox({ left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight });
+      updateSelectionFromRect(nextRect);
+    };
+
+    const handleMouseUp = () => {
+      setSelectionBox(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }
+
+  function handleRowClick(item) {
+    if (suppressClickRef.current) return;
+    setSelected(item.relativePath);
+  }
+
+  function handleRowDragStart(event, item) {
+    if (isInteractiveElement(event.target)) {
+      event.preventDefault();
+      return;
+    }
+
+    const nextPaths = getDraggedPaths(item.relativePath);
+    setDraggingPaths(nextPaths);
+    setSelected(item.relativePath);
+    if (!selectedPaths.includes(item.relativePath)) {
+      setSelectedPaths(nextPaths);
+    }
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', nextPaths.join('\n'));
+    }
+  }
+
+  function handleRowDragEnd() {
+    setDraggingPaths([]);
+    setDropTargetPath('');
+  }
+
+  function handleFolderDragOver(event, item) {
+    if (!draggingPaths.length) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    if (dropTargetPath !== item.relativePath) {
+      setDropTargetPath(item.relativePath);
+    }
+  }
+
+  function handleFolderDragLeave(event) {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setDropTargetPath('');
+  }
+
+  async function handleFolderDrop(event, item) {
+    if (!draggingPaths.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    await handleMove(item.relativePath, draggingPaths);
+  }
+
+  const selectionBoxStyle = useMemo(() => {
+    if (!selectionBox || !contentRef.current) return null;
+    const contentRect = contentRef.current.getBoundingClientRect();
+    return {
+      left: selectionBox.left - contentRect.left + contentRef.current.scrollLeft,
+      top: selectionBox.top - contentRect.top + contentRef.current.scrollTop,
+      width: selectionBox.width,
+      height: selectionBox.height,
+    };
+  }, [selectionBox]);
 
   return (
     <div className="desktop">
@@ -439,8 +610,16 @@ export default function App() {
           )}
         </aside>
 
-        <section className={`content ${dragActive ? 'drag-active' : ''}`} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+        <section
+          ref={contentRef}
+          className={`content ${dragActive ? 'drag-active' : ''} ${selectionBox ? 'selection-active' : ''}`}
+          onMouseDown={handleSelectionMouseDown}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
           <div className="drop-hint">Trascina qui i file per caricarli</div>
+          {selectionBoxStyle && <div className="selection-box" style={selectionBoxStyle} aria-hidden />}
           <table>
             <thead>
               <tr>
@@ -459,9 +638,20 @@ export default function App() {
                 return (
                   <tr
                     key={item.relativePath}
-                    className={checked || selected === item.relativePath ? 'selected-row' : ''}
-                    onClick={() => setSelected(item.relativePath)}
+                    data-row-path={item.relativePath}
+                    draggable
+                    className={[
+                      checked || selected === item.relativePath ? 'selected-row' : '',
+                      item.type === 'directory' && dropTargetPath === item.relativePath ? 'drop-target-row' : '',
+                      draggingPaths.includes(item.relativePath) ? 'dragging-row' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => handleRowClick(item)}
                     onDoubleClick={() => handleOpen(item)}
+                    onDragStart={(event) => handleRowDragStart(event, item)}
+                    onDragEnd={handleRowDragEnd}
+                    onDragOver={item.type === 'directory' ? (event) => handleFolderDragOver(event, item) : undefined}
+                    onDragLeave={item.type === 'directory' ? handleFolderDragLeave : undefined}
+                    onDrop={item.type === 'directory' ? (event) => handleFolderDrop(event, item) : undefined}
                   >
                     <td>
                       <input

@@ -2,17 +2,13 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_CHROMIUM_CANDIDATES = [
-  process.env.CHROMIUM_BIN,
-  '/usr/bin/chromium-browser',
-  '/usr/bin/chromium',
-  '/snap/bin/chromium',
-  'chromium-browser',
-  'chromium',
+const DEFAULT_WEASYPRINT_CANDIDATES = [
+  process.env.WEASYPRINT_BIN,
+  '/usr/bin/weasyprint',
+  'weasyprint',
 ].filter(Boolean);
 
 function normalizeHtmlDocument(html) {
@@ -28,8 +24,8 @@ function normalizeHtmlDocument(html) {
   return `<!doctype html><html><head><meta charset="utf-8"></head><body>${source}</body></html>`;
 }
 
-async function resolveChromiumExecutable() {
-  for (const candidate of DEFAULT_CHROMIUM_CANDIDATES) {
+async function resolveWeasyprintExecutable() {
+  for (const candidate of DEFAULT_WEASYPRINT_CANDIDATES) {
     if (!candidate.startsWith('/')) {
       return candidate;
     }
@@ -42,7 +38,7 @@ async function resolveChromiumExecutable() {
     }
   }
 
-  throw new Error('Chromium executable not found');
+  throw new Error('WeasyPrint executable not found');
 }
 
 function sanitizePdfFilename(filename = 'document.pdf') {
@@ -54,54 +50,21 @@ function sanitizePdfFilename(filename = 'document.pdf') {
 }
 
 export async function renderPdfFromHtml(html, options = {}) {
-  const chromiumExecutable = await resolveChromiumExecutable();
+  const weasyprintExecutable = await resolveWeasyprintExecutable();
   const filename = sanitizePdfFilename(options.filename);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fileserver-pdf-'));
   const htmlPath = path.join(tempDir, 'document.html');
   const pdfPath = path.join(tempDir, filename);
-  const runtimeDir = path.join(tempDir, 'runtime');
-  const userDataDir = path.join(tempDir, 'profile');
 
   try {
-    await fs.mkdir(runtimeDir, { recursive: true });
-    await fs.mkdir(userDataDir, { recursive: true });
     await fs.writeFile(htmlPath, normalizeHtmlDocument(html), 'utf8');
 
-    await execFileAsync(chromiumExecutable, [
-      '--headless',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-dev-shm-usage',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-background-networking',
-      '--disable-breakpad',
-      '--disable-component-update',
-      '--disable-crash-reporter',
-      '--disable-features=MediaRouter',
-      '--disable-sync',
-      '--metrics-recording-only',
-      '--mute-audio',
-      '--no-default-browser-check',
-      '--no-first-run',
-      '--no-pings',
-      '--no-proxy-server',
-      '--no-zygote',
-      '--allow-file-access-from-files',
-      '--run-all-compositor-stages-before-draw',
-      '--virtual-time-budget=2000',
-      '--print-to-pdf-no-header',
-      `--user-data-dir=${userDataDir}`,
-      `--print-to-pdf=${pdfPath}`,
-      pathToFileURL(htmlPath).href,
-    ], {
-      env: {
-        ...process.env,
-        HOME: tempDir,
-        XDG_RUNTIME_DIR: runtimeDir,
-        DBUS_SESSION_BUS_ADDRESS: 'disabled:',
-      },
-    });
+    await execFileAsync(weasyprintExecutable, [
+      '--media-type',
+      'print',
+      htmlPath,
+      pdfPath,
+    ]);
 
     const pdfBuffer = await fs.readFile(pdfPath);
     return { filename, pdfBuffer };

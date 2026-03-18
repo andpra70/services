@@ -88,6 +88,14 @@ export function renameItem(path, newName) {
   });
 }
 
+export function moveItems(paths, targetPath) {
+  return api('/move', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths, targetPath }),
+  });
+}
+
 export async function downloadFile(path) {
   const query = new URLSearchParams({ path });
   const res = await api(`/download?${query.toString()}`);

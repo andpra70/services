@@ -117,6 +117,15 @@ async function listDirectory(relativePath = '') {
   return detailed;
 }
 
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sendError(res, err, status = 400) {
   const message = err instanceof Error ? err.message : String(err);
   res.status(status).json({ error: message });
@@ -320,6 +329,60 @@ app.patch('/api/rename', async (req, res) => {
 
     await fs.rename(sourceAbs, targetAbs);
     res.json({ ok: true, relativePath: targetRel });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+app.patch('/api/move', async (req, res) => {
+  try {
+    const { paths, targetPath = '' } = req.body || {};
+    if (!Array.isArray(paths) || paths.length === 0) {
+      return sendError(res, 'paths must be a non-empty array', 400);
+    }
+
+    const cleanTarget = sanitizeRelativePath(targetPath);
+    const targetAbs = resolveSafeAbsolutePath(cleanTarget);
+    const targetStat = await fs.stat(targetAbs);
+    if (!targetStat.isDirectory()) {
+      return sendError(res, 'Target path is not a directory', 400);
+    }
+
+    const sanitizedPaths = [...new Set(paths.map((item) => sanitizeRelativePath(item)).filter(Boolean))];
+    if (sanitizedPaths.length === 0) {
+      return sendError(res, 'No valid paths provided', 400);
+    }
+
+    for (const sourcePath of sanitizedPaths) {
+      const sourceAbs = resolveSafeAbsolutePath(sourcePath);
+      const sourceStat = await fs.stat(sourceAbs);
+      const destinationRel = sanitizeRelativePath(path.join(cleanTarget, path.basename(sourcePath)));
+      const destinationAbs = resolveSafeAbsolutePath(destinationRel);
+
+      if (destinationRel === sourcePath) {
+        return sendError(res, `Source already in destination: ${sourcePath}`, 400);
+      }
+
+      const sourcePrefix = `${sourcePath}/`;
+      if (sourceStat.isDirectory() && cleanTarget && (cleanTarget === sourcePath || cleanTarget.startsWith(sourcePrefix))) {
+        return sendError(res, `Cannot move a folder into itself: ${sourcePath}`, 400);
+      }
+
+      if (await pathExists(destinationAbs)) {
+        return sendError(res, `Destination already exists: ${destinationRel}`, 400);
+      }
+    }
+
+    await Promise.all(
+      sanitizedPaths.map(async (sourcePath) => {
+        const sourceAbs = resolveSafeAbsolutePath(sourcePath);
+        const destinationRel = sanitizeRelativePath(path.join(cleanTarget, path.basename(sourcePath)));
+        const destinationAbs = resolveSafeAbsolutePath(destinationRel);
+        await fs.rename(sourceAbs, destinationAbs);
+      })
+    );
+
+    res.json({ ok: true, moved: sanitizedPaths.length, targetPath: cleanTarget });
   } catch (err) {
     sendError(res, err, 400);
   }
