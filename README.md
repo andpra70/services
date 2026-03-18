@@ -61,6 +61,12 @@ Servizio unico: `http://localhost:8080`
 
 Il volume dati locale viene montato da `./data/files` a `/data` nel container. Non e' presente autenticazione: il frontend chiama direttamente le API esposte dallo stesso servizio.
 
+Libreria browser cross-site:
+
+- asset: `http://localhost:8080/assets/api.js`
+- globale esposta: `window.FileserverApi`
+- factory: `window.FileserverApi.createClient({ apiBase: 'http://localhost:8080/api' })`
+
 ## API principali
 
 - `GET /api/list?path=`

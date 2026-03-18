@@ -18,6 +18,7 @@ const clientDistPath = path.resolve(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '../../client-dist')
 );
 const appBase = normalizeAppBase(process.env.APP_BASE || '/');
+const sharedApiAssetPath = path.join(clientDistPath, 'assets', 'api.js');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -71,6 +72,13 @@ async function ensureClientDist() {
   }
 }
 
+async function ensureSharedApiAsset() {
+  const st = await fs.stat(sharedApiAssetPath);
+  if (!st.isFile()) {
+    throw new Error(`Shared API asset not found: ${sharedApiAssetPath}`);
+  }
+}
+
 async function listDirectory(relativePath = '') {
   const absoluteDir = resolveSafeAbsolutePath(relativePath);
   const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
@@ -104,6 +112,12 @@ function sendError(res, err, status = 400) {
 
 function detectMimeType(filePath) {
   return mime.lookup(filePath) || 'application/octet-stream';
+}
+
+function setCrossSiteAssetHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'public, max-age=300');
 }
 
 app.get('/api/health', (_req, res) => {
@@ -346,6 +360,21 @@ app.put('/api/file-content', async (req, res) => {
   }
 });
 
+const sharedApiAssetRoutes = ['/assets/api.js'];
+if (appBase !== '/') {
+  sharedApiAssetRoutes.push(`${appBase}assets/api.js`);
+}
+
+app.get(sharedApiAssetRoutes, (req, res, next) => {
+  try {
+    setCrossSiteAssetHeaders(res);
+    res.type('application/javascript');
+    res.sendFile(sharedApiAssetPath);
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.use(
   appBase,
   express.static(clientDistPath, {
@@ -365,7 +394,7 @@ app.get(`${appBase === '/' ? '' : appBase}*`, async (req, res, next) => {
   }
 });
 
-Promise.all([ensureVolumeRoot(), ensureClientDist()])
+Promise.all([ensureVolumeRoot(), ensureClientDist(), ensureSharedApiAsset()])
   .then(() => {
     app.listen(port, () => {
       console.log(`File server API listening on http://localhost:${port}`);

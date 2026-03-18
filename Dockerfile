@@ -6,6 +6,7 @@ COPY client/package.json client/package-lock.json ./
 RUN npm ci
 
 COPY client/index.html ./
+COPY client/public ./public
 COPY client/vite.config.js ./
 COPY client/src ./src
 
