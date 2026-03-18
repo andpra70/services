@@ -1,31 +1,10 @@
-import { getValidAccessToken, redirectToLogin } from './auth';
-
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
-async function withAuthHeaders(headers = {}) {
-  const token = await getValidAccessToken();
-  if (!token) {
-    await redirectToLogin();
-    throw new Error('Authentication required');
-  }
-
-  return {
-    ...headers,
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 async function api(path, options = {}) {
-  const headers = await withAuthHeaders(options.headers || {});
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers,
+    headers: options.headers || {},
   });
-
-  if (res.status === 401) {
-    await redirectToLogin();
-    throw new Error('Authentication required');
-  }
 
   if (!res.ok) {
     let message = `Request failed: ${res.status}`;
@@ -59,7 +38,6 @@ export function createFolder(path, name) {
 }
 
 export async function uploadFiles(path, files, onProgress) {
-  const authHeaders = await withAuthHeaders();
   const formData = new FormData();
   formData.append('path', path);
   Array.from(files).forEach((file) => formData.append('files', file));
@@ -67,15 +45,8 @@ export async function uploadFiles(path, files, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/upload`);
-    xhr.setRequestHeader('Authorization', authHeaders.Authorization);
 
-    xhr.onload = async () => {
-      if (xhr.status === 401) {
-        await redirectToLogin();
-        reject(new Error('Authentication required'));
-        return;
-      }
-
+    xhr.onload = () => {
       if (xhr.status < 200 || xhr.status >= 300) {
         try {
           const body = JSON.parse(xhr.responseText);

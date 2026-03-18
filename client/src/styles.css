@@ -46,14 +46,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-.logout-btn {
-  margin-left: auto;
-}
-
-.auth-wait {
-  padding: 30px;
-}
-
 .window-controls {
   display: flex;
   gap: 7px;

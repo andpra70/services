@@ -11,7 +11,6 @@ import {
   saveFileContent,
   uploadFiles,
 } from './api';
-import { ensureAuthenticated, logout } from './auth';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 const TEXT_EXTENSIONS = new Set(['txt', 'md', 'json', 'yaml', 'yml', 'xml', 'csv', 'log', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'sh', 'py']);
@@ -104,7 +103,6 @@ function Icon({ name }) {
     eye: [<path key="1" d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />, <circle key="2" cx="12" cy="12" r="3" />],
     edit: [<path key="1" d="M12 20h9" />, <path key="2" d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />],
     rename: [<path key="1" d="M4 7h16" />, <path key="2" d="M10 7v10" />, <path key="3" d="M14 7v10" />, <path key="4" d="M8 17h8" />],
-    logout: [<path key="1" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />, <polyline key="2" points="16 17 21 12 16 7" />, <line key="3" x1="21" y1="12" x2="9" y2="12" />],
     cancel: [<path key="1" d="M18 6L6 18" />, <path key="2" d="M6 6l12 12" />],
     save: [<path key="1" d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />, <polyline key="2" points="17 21 17 13 7 13 7 21" />],
     close: [<path key="1" d="M18 6L6 18" />, <path key="2" d="M6 6l12 12" />],
@@ -114,7 +112,6 @@ function Icon({ name }) {
 }
 
 export default function App() {
-  const [authReady, setAuthReady] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -165,22 +162,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const ok = await ensureAuthenticated();
-        if (!ok || !alive) return;
-        setAuthReady(true);
-        await refresh('');
-      } catch (err) {
-        if (alive) setError(err.message);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
+    refresh('');
   }, []);
 
   function toggleSelectedPath(relativePath) {
@@ -384,14 +366,6 @@ export default function App() {
     await handleUploadFromList(files);
   }
 
-  if (!authReady) {
-    return (
-      <div className="desktop auth-wait">
-        <p>Verifica autenticazione in corso...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="desktop">
       <header className="topbar">
@@ -401,7 +375,6 @@ export default function App() {
           <span />
         </div>
         <h1>File Explorer</h1>
-        <button className="icon-btn logout-btn" onClick={logout} title="Logout" aria-label="Logout"><Icon name="logout" /></button>
       </header>
 
       <section className="toolbar">

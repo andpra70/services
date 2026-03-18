@@ -59,7 +59,7 @@ docker compose up --build
 
 Servizio unico: `http://localhost:8080`
 
-Il volume dati locale viene montato da `./data` a `/data` nel container.
+Il volume dati locale viene montato da `./data` a `/data` nel container. Non e' presente autenticazione: il frontend chiama direttamente le API esposte dallo stesso servizio.
 
 ## API principali
 
@@ -79,5 +79,4 @@ Il volume dati locale viene montato da `./data` a `/data` nel container.
 - Le path richieste dal client sono validate lato server.
 - Qualsiasi tentativo di uscire da `VOLUME_ROOT` viene bloccato.
 - La root del volume non può essere eliminata.
-- L'OAuth server richiede secret robusti in `.env` (`OAUTH_COOKIE_KEYS`, `OAUTH_ADMIN_PASSWORD` e `OAUTH_CLIENT_SECRET` se il client usa auth method confidenziale).
 - Per SPA usa `OAUTH_CLIENT_AUTH_METHOD=none` con PKCE; usa `client_secret_basic` solo per client confidenziali.

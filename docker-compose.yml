@@ -5,9 +5,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE: /api
-        VITE_OAUTH_BASE: /oauth
-        VITE_OAUTH_CLIENT_ID: fileserver-web
-        VITE_OAUTH_SCOPE: openid profile email offline_access
         VITE_APP_BASE: ./
     container_name: fileserver
     restart: unless-stopped
