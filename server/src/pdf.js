@@ -68,13 +68,25 @@ export async function renderPdfFromHtml(html, options = {}) {
     await fs.writeFile(htmlPath, normalizeHtmlDocument(html), 'utf8');
 
     await execFileAsync(chromiumExecutable, [
-      '--headless=new',
+      '--headless',
       '--disable-gpu',
+      '--disable-software-rasterizer',
       '--disable-dev-shm-usage',
       '--no-sandbox',
       '--disable-setuid-sandbox',
+      '--disable-background-networking',
+      '--disable-breakpad',
+      '--disable-component-update',
+      '--disable-crash-reporter',
+      '--disable-features=MediaRouter',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-default-browser-check',
+      '--no-first-run',
+      '--no-pings',
+      '--no-proxy-server',
       '--no-zygote',
-      '--single-process',
       '--allow-file-access-from-files',
       '--run-all-compositor-stages-before-draw',
       '--virtual-time-budget=2000',
@@ -87,6 +99,7 @@ export async function renderPdfFromHtml(html, options = {}) {
         ...process.env,
         HOME: tempDir,
         XDG_RUNTIME_DIR: runtimeDir,
+        DBUS_SESSION_BUS_ADDRESS: 'disabled:',
       },
     });
 
