@@ -462,8 +462,9 @@ export default function App() {
     if (!draggingPaths.length) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    if (dropTargetPath !== item.relativePath) {
-      setDropTargetPath(item.relativePath);
+    const nextTargetPath = item.isUpEntry ? (item.targetPath || '') : item.relativePath;
+    if (dropTargetPath !== nextTargetPath) {
+      setDropTargetPath(nextTargetPath);
     }
   }
 
@@ -476,7 +477,7 @@ export default function App() {
     if (!draggingPaths.length) return;
     event.preventDefault();
     event.stopPropagation();
-    await handleMove(item.relativePath, draggingPaths);
+    await handleMove(item.isUpEntry ? (item.targetPath || '') : item.relativePath, draggingPaths);
   }
 
   return (
@@ -580,7 +581,7 @@ export default function App() {
                     draggable={!item.isUpEntry}
                     className={[
                       checked || selected === item.relativePath ? 'selected-row' : '',
-                      item.type === 'directory' && !item.isUpEntry && dropTargetPath === item.relativePath ? 'drop-target-row' : '',
+                      item.type === 'directory' && dropTargetPath === (item.isUpEntry ? (item.targetPath || '') : item.relativePath) ? 'drop-target-row' : '',
                       draggingPaths.includes(item.relativePath) ? 'dragging-row' : '',
                     ].filter(Boolean).join(' ')}
                     onClick={() => setSelected(item.relativePath)}
