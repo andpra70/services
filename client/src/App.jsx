@@ -95,10 +95,6 @@ function isInteractiveElement(target) {
   return target instanceof Element && Boolean(target.closest('button, input, select, textarea, a, label'));
 }
 
-function rectsIntersect(a, b) {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-}
-
 function Icon({ name }) {
   const common = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
   const paths = {
@@ -136,15 +132,15 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [draggingPaths, setDraggingPaths] = useState([]);
   const [dropTargetPath, setDropTargetPath] = useState('');
-  const [selectionBox, setSelectionBox] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [previewSaving, setPreviewSaving] = useState(false);
   const [previewState, setPreviewState] = useState({ open: false, kind: null, path: '', content: '', error: '', objectUrl: '', editable: false });
   const filePickerRef = useRef(null);
-  const contentRef = useRef(null);
-  const suppressClickRef = useRef(false);
 
   const breadcrumb = useMemo(() => splitSegments(currentPath), [currentPath]);
+  const parentPath = useMemo(() => (
+    breadcrumb.length ? breadcrumb[breadcrumb.length - 2]?.path || '' : null
+  ), [breadcrumb]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -152,6 +148,19 @@ export default function App() {
       .filter((item) => !q || item.name.toLowerCase().includes(q))
       .sort((a, b) => compareItems(a, b, sortBy));
   }, [items, query, sortBy]);
+  const listedItems = useMemo(() => (
+    currentPath
+      ? [{
+          name: '..',
+          relativePath: '__up__',
+          targetPath: parentPath || '',
+          type: 'directory',
+          size: 0,
+          updatedAt: '',
+          isUpEntry: true,
+        }, ...filteredItems]
+      : filteredItems
+  ), [currentPath, filteredItems, parentPath]);
 
   const selectedItem = useMemo(() => items.find((item) => item.relativePath === selected) || null, [items, selected]);
   const visiblePaths = useMemo(() => filteredItems.map((item) => item.relativePath), [filteredItems]);
@@ -249,6 +258,11 @@ export default function App() {
   }
 
   async function handleOpen(item) {
+    if (item.isUpEntry) {
+      await refresh(item.targetPath || '');
+      return;
+    }
+
     if (item.type === 'directory') {
       await refresh(item.relativePath);
       return;
@@ -415,73 +429,12 @@ export default function App() {
     await handleUploadFromList(files);
   }
 
-  function updateSelectionFromRect(selectionRect) {
-    const content = contentRef.current;
-    if (!content) return;
-
-    const rowNodes = content.querySelectorAll('tbody tr[data-row-path]');
-    const nextSelection = [];
-    rowNodes.forEach((row) => {
-      const rowRect = row.getBoundingClientRect();
-      if (rectsIntersect(selectionRect, rowRect)) {
-        const rowPath = row.getAttribute('data-row-path');
-        if (rowPath) nextSelection.push(rowPath);
-      }
-    });
-
-    setSelectedPaths(nextSelection);
-  }
-
-  function handleSelectionMouseDown(event) {
-    if (event.button !== 0 || draggingPaths.length > 0 || isInteractiveElement(event.target)) return;
-
-    const content = contentRef.current;
-    if (!content) return;
-
-    const originX = event.clientX;
-    const originY = event.clientY;
-
-    setSelectionBox({ left: originX, top: originY, width: 0, height: 0 });
-
-    const handleMouseMove = (moveEvent) => {
-      const nextLeft = Math.min(originX, moveEvent.clientX);
-      const nextTop = Math.min(originY, moveEvent.clientY);
-      const nextWidth = Math.abs(moveEvent.clientX - originX);
-      const nextHeight = Math.abs(moveEvent.clientY - originY);
-      const nextRect = {
-        left: nextLeft,
-        top: nextTop,
-        right: nextLeft + nextWidth,
-        bottom: nextTop + nextHeight,
-      };
-
-      if (nextWidth > 3 || nextHeight > 3) {
-        suppressClickRef.current = true;
-      }
-
-      setSelectionBox({ left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight });
-      updateSelectionFromRect(nextRect);
-    };
-
-    const handleMouseUp = () => {
-      setSelectionBox(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }
-
-  function handleRowClick(item) {
-    if (suppressClickRef.current) return;
-    setSelected(item.relativePath);
-  }
-
   function handleRowDragStart(event, item) {
+    if (item.isUpEntry) {
+      event.preventDefault();
+      return;
+    }
+
     if (isInteractiveElement(event.target)) {
       event.preventDefault();
       return;
@@ -525,17 +478,6 @@ export default function App() {
     event.stopPropagation();
     await handleMove(item.relativePath, draggingPaths);
   }
-
-  const selectionBoxStyle = useMemo(() => {
-    if (!selectionBox || !contentRef.current) return null;
-    const contentRect = contentRef.current.getBoundingClientRect();
-    return {
-      left: selectionBox.left - contentRect.left + contentRef.current.scrollLeft,
-      top: selectionBox.top - contentRect.top + contentRef.current.scrollTop,
-      width: selectionBox.width,
-      height: selectionBox.height,
-    };
-  }, [selectionBox]);
 
   return (
     <div className="desktop">
@@ -611,15 +553,12 @@ export default function App() {
         </aside>
 
         <section
-          ref={contentRef}
-          className={`content ${dragActive ? 'drag-active' : ''} ${selectionBox ? 'selection-active' : ''}`}
-          onMouseDown={handleSelectionMouseDown}
+          className={`content ${dragActive ? 'drag-active' : ''}`}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
           <div className="drop-hint">Trascina qui i file per caricarli</div>
-          {selectionBoxStyle && <div className="selection-box" style={selectionBoxStyle} aria-hidden />}
           <table>
             <thead>
               <tr>
@@ -633,19 +572,18 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => {
-                const checked = selectedPaths.includes(item.relativePath);
+              {listedItems.map((item) => {
+                const checked = !item.isUpEntry && selectedPaths.includes(item.relativePath);
                 return (
                   <tr
                     key={item.relativePath}
-                    data-row-path={item.relativePath}
-                    draggable
+                    draggable={!item.isUpEntry}
                     className={[
                       checked || selected === item.relativePath ? 'selected-row' : '',
-                      item.type === 'directory' && dropTargetPath === item.relativePath ? 'drop-target-row' : '',
+                      item.type === 'directory' && !item.isUpEntry && dropTargetPath === item.relativePath ? 'drop-target-row' : '',
                       draggingPaths.includes(item.relativePath) ? 'dragging-row' : '',
                     ].filter(Boolean).join(' ')}
-                    onClick={() => handleRowClick(item)}
+                    onClick={() => setSelected(item.relativePath)}
                     onDoubleClick={() => handleOpen(item)}
                     onDragStart={(event) => handleRowDragStart(event, item)}
                     onDragEnd={handleRowDragEnd}
@@ -654,24 +592,28 @@ export default function App() {
                     onDrop={item.type === 'directory' ? (event) => handleFolderDrop(event, item) : undefined}
                   >
                     <td>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          stopRowClick(event);
-                          toggleSelectedPath(item.relativePath);
-                        }}
-                        onClick={stopRowClick}
-                      />
+                      {item.isUpEntry ? null : (
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            stopRowClick(event);
+                            toggleSelectedPath(item.relativePath);
+                          }}
+                          onClick={stopRowClick}
+                        />
+                      )}
                     </td>
                     <td>
                       <span className={`icon icon-${item.type}`} aria-hidden />
                       <span>{item.name}</span>
                     </td>
                     <td>{item.type === 'directory' ? '-' : formatSize(item.size)}</td>
-                    <td>{formatDate(item.updatedAt)}</td>
+                    <td>{item.updatedAt ? formatDate(item.updatedAt) : '-'}</td>
                     <td>
-                      {item.type === 'directory' ? (
+                      {item.isUpEntry ? (
+                        <button className="icon-btn" onClick={(event) => { stopRowClick(event); refresh(item.targetPath || ''); }} title="Su" aria-label="Su"><Icon name="up" /></button>
+                      ) : item.type === 'directory' ? (
                         <>
                           <button className="icon-btn" onClick={(event) => { stopRowClick(event); refresh(item.relativePath); }} title="Apri" aria-label="Apri"><Icon name="open" /></button>
                           <button className="icon-btn" onClick={(event) => { stopRowClick(event); handleDownloadDirectoryZip(item); }} title="Scarica ZIP" aria-label="Scarica ZIP"><Icon name="zip" /></button>
@@ -683,8 +625,8 @@ export default function App() {
                           <button className="icon-btn" onClick={(event) => { stopRowClick(event); openFilePreview(item); }} title="Modifica in linea" aria-label="Modifica in linea"><Icon name="edit" /></button>
                         </>
                       )}
-                      <button className="icon-btn" onClick={(event) => { stopRowClick(event); handleRename(item); }} title="Rinomina" aria-label="Rinomina"><Icon name="rename" /></button>
-                      <button className="icon-btn danger" onClick={(event) => { stopRowClick(event); handleDelete(item); }} title="Elimina" aria-label="Elimina"><Icon name="trash" /></button>
+                      {!item.isUpEntry && <button className="icon-btn" onClick={(event) => { stopRowClick(event); handleRename(item); }} title="Rinomina" aria-label="Rinomina"><Icon name="rename" /></button>}
+                      {!item.isUpEntry && <button className="icon-btn danger" onClick={(event) => { stopRowClick(event); handleDelete(item); }} title="Elimina" aria-label="Elimina"><Icon name="trash" /></button>}
                     </td>
                   </tr>
                 );

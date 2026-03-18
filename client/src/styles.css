@@ -190,10 +190,6 @@ button:disabled {
   overflow: auto;
 }
 
-.content.selection-active {
-  user-select: none;
-}
-
 .drop-hint {
   display: none;
   position: absolute;
@@ -256,14 +252,6 @@ tr:hover {
   background: #dff3df;
   outline: 2px solid #75a874;
   outline-offset: -2px;
-}
-
-.selection-box {
-  position: absolute;
-  border: 1px solid #4e8dd6;
-  background: rgba(78, 141, 214, 0.18);
-  pointer-events: none;
-  z-index: 2;
 }
 
 .icon {
