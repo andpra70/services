@@ -22,6 +22,17 @@ const sharedApiAssetPath = path.join(clientDistPath, 'assets', 'api.js');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+
+  res.on('finish', () => {
+    const durationMs = Date.now() - startedAt;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
+  });
+
+  next();
+});
+
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
 

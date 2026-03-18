@@ -61,6 +61,16 @@ Servizio unico: `http://localhost:8080`
 
 Il volume dati locale viene montato da `./data/files` a `/data` nel container. Non e' presente autenticazione: il frontend chiama direttamente le API esposte dallo stesso servizio.
 
+Il container gira come utente non-root con UID/GID `1000:1000`. La directory host `./data/files` deve quindi essere scrivibile da `1000:1000`.
+
+Esempio preparazione directory host:
+
+```bash
+mkdir -p ./data/files
+sudo chown -R 1000:1000 ./data/files
+chmod 775 ./data/files
+```
+
 Libreria browser cross-site:
 
 - asset: `http://localhost:8080/assets/api.js`

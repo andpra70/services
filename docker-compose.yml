@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        APP_UID: 1000
+        APP_GID: 1000
         VITE_API_BASE: /api
         VITE_APP_BASE: ./
     container_name: fileserver

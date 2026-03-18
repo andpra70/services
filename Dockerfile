@@ -28,14 +28,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+ARG APP_UID=1000
+ARG APP_GID=1000
+
 COPY server/package.json ./server/package.json
 COPY server/src ./server/src
 COPY --from=server-deps /build/server/node_modules ./server/node_modules
 COPY --from=client-build /build/client/dist ./client-dist
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
-    mkdir -p /data && \
-    chown -R appuser:appgroup /app /data
+RUN mkdir -p /data && \
+    chown -R "${APP_UID}:${APP_GID}" /app /data
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -47,6 +49,6 @@ ENV MAX_EDITABLE_BYTES=1048576
 
 EXPOSE 8080
 
-USER appuser
+USER ${APP_UID}:${APP_GID}
 
 CMD ["node", "server/src/index.js"]
