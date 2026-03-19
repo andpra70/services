@@ -42,6 +42,7 @@ Variabili principali:
 - `APP_BASE`: base path della SPA servita dal backend
 - `CORS_ORIGIN`: origin del frontend in sviluppo locale
 - `MAX_EDITABLE_BYTES`: limite per editor testo
+- `MAX_FILE_CONTENT_BYTES`: limite massimo per lettura/scrittura contenuti testuali via API (`/api/file-content`); se non impostato usa `MAX_EDITABLE_BYTES`
 
 ## Avvio locale (senza Docker)
 

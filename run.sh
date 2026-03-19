@@ -33,7 +33,7 @@ docker run -d \
   -e CLIENT_DIST=/app/client-dist \
   -e VOLUME_ROOT=/data \
   -e CORS_ORIGIN="http://localhost:${HOST_PORT}" \
-  -e MAX_EDITABLE_BYTES=1048576 \
+  -e MAX_EDITABLE_BYTES=26214400 \
   -v "${DATA_DIR}:/data" \
   "${FULL_IMAGE}"
 

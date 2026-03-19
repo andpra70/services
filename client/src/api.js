@@ -132,10 +132,11 @@ export function loadFileContent(path) {
 }
 
 export function saveFileContent(path, content) {
-  return api('/file-content', {
+  const query = new URLSearchParams({ path });
+  return api(`/file-content?${query.toString()}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, content }),
+    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: content,
   });
 }
 

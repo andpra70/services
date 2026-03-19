@@ -12,7 +12,8 @@ import { renderPdfFromHtml } from './pdf.js';
 const app = express();
 const port = Number(process.env.PORT || 8080);
 const volumeRoot = path.resolve(process.env.VOLUME_ROOT || '/mnt/data');
-const maxEditableBytes = Number(process.env.MAX_EDITABLE_BYTES || 1024 * 1024);
+const maxEditableBytes = Number(process.env.MAX_EDITABLE_BYTES || 25 * 1024 * 1024);
+const fileContentLimitBytes = Number(process.env.MAX_FILE_CONTENT_BYTES || maxEditableBytes);
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const clientDistPath = path.resolve(
   process.env.CLIENT_DIST ||
@@ -36,6 +37,7 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
+const textFileContentParser = express.text({ type: 'text/plain', limit: `${fileContentLimitBytes}b` });
 
 function normalizeAppBase(rawBase = '/') {
   const value = String(rawBase || '/').trim();
@@ -398,8 +400,8 @@ app.get('/api/file-content', async (req, res) => {
       return sendError(res, 'Path is not a file', 400);
     }
 
-    if (st.size > maxEditableBytes) {
-      return sendError(res, `File too large to edit (max ${maxEditableBytes} bytes)`, 413);
+    if (st.size > fileContentLimitBytes) {
+      return sendError(res, `File too large to edit (max ${fileContentLimitBytes} bytes)`, 413);
     }
 
     const content = await fs.readFile(fileAbs, 'utf8');
@@ -409,16 +411,20 @@ app.get('/api/file-content', async (req, res) => {
   }
 });
 
-app.put('/api/file-content', async (req, res) => {
+app.put('/api/file-content', textFileContentParser, async (req, res) => {
   try {
-    const { path: relativePath, content } = req.body || {};
-    const cleanRelative = sanitizeRelativePath(relativePath || '');
+    const relativePath = req.query.path || req.body?.path || '';
+    const cleanRelative = sanitizeRelativePath(relativePath);
+    const content = typeof req.body === 'string' ? req.body : req.body?.content;
 
     if (!cleanRelative) {
       return sendError(res, 'Invalid file path', 400);
     }
     if (typeof content !== 'string') {
       return sendError(res, 'content must be a string', 400);
+    }
+    if (Buffer.byteLength(content, 'utf8') > fileContentLimitBytes) {
+      return sendError(res, `File too large to save (max ${fileContentLimitBytes} bytes)`, 413);
     }
 
     const fileAbs = resolveSafeAbsolutePath(cleanRelative);
@@ -480,6 +486,13 @@ app.get(`${appBase === '/' ? '' : appBase}*`, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+app.use((err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return sendError(res, `Request body too large (max ${fileContentLimitBytes} bytes for file content)`, 413);
+  }
+  next(err);
 });
 
 Promise.all([ensureVolumeRoot(), ensureClientDist(), ensureSharedApiAsset()])

@@ -140,10 +140,10 @@
         return api('/file-content?' + toQuery({ path: path }));
       },
       saveFileContent: function (path, content) {
-        return api('/file-content', {
+        return api('/file-content?' + toQuery({ path: path }), {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: path, content: content })
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: content
         });
       },
       printPdf: async function (html, filename) {
