@@ -13,8 +13,10 @@ const app = express();
 const port = Number(process.env.PORT || 8080);
 const volumeRoot = path.resolve(process.env.VOLUME_ROOT || '/mnt/data');
 const maxEditableBytes = Number(process.env.MAX_EDITABLE_BYTES || 25 * 1024 * 1024);
-const fileContentLimitBytes = Number(process.env.MAX_FILE_CONTENT_BYTES || maxEditableBytes);
+const maxBinaryFileBytes = Number(process.env.MAX_BINARY_FILE_BYTES || 50 * 1024 * 1024);
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const oauthIssuer = String(process.env.OAUTH_ISSUER || 'http://localhost:9000').replace(/\/+$/, '');
+const tokenValidationCacheTtlMs = Number(process.env.TOKEN_VALIDATION_CACHE_TTL_MS || 15_000);
 const clientDistPath = path.resolve(
   process.env.CLIENT_DIST ||
     path.join(path.dirname(fileURLToPath(import.meta.url)), '../../client-dist')
@@ -22,7 +24,11 @@ const clientDistPath = path.resolve(
 const appBase = normalizeAppBase(process.env.APP_BASE || '/');
 const sharedApiAssetPath = path.join(clientDistPath, 'assets', 'api.js');
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxBinaryFileBytes },
+});
+const tokenValidationCache = new Map();
 
 app.use((req, res, next) => {
   const startedAt = Date.now();
@@ -37,7 +43,67 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
-const textFileContentParser = express.text({ type: 'text/plain', limit: `${fileContentLimitBytes}b` });
+const binaryFileContentParser = express.raw({ type: '*/*', limit: `${maxBinaryFileBytes}b` });
+
+function getBearerTokenFromRequest(req) {
+  const value = String(req.get('authorization') || '').trim();
+  const match = value.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || '';
+}
+
+async function validateAccessToken(token) {
+  console.debug('Validating access token (truncated):', token.slice(0, 4) + '...');
+  const cached = tokenValidationCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.profile;
+  }
+
+  const response = await fetch(`${oauthIssuer}/me`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const profile = await response.json();
+  tokenValidationCache.set(token, {
+    profile,
+    expiresAt: Date.now() + tokenValidationCacheTtlMs,
+  });
+  console.debug('Validated access token (truncated):', token.slice(0, 4) + '...');
+  console.debug('Token validation response profile:', profile);
+  return profile;
+}
+
+async function requireBearerAuth(req, res, next) {
+  if (req.method === 'OPTIONS') return next();
+
+  const token = getBearerTokenFromRequest(req);
+  if (!token) {
+    return sendError(res, 'Missing bearer token', 401);
+  }
+
+  console.debug('Received bearer token for authentication (truncated):', token.slice(0, 4) + '...');
+
+  try {
+    const profile = await validateAccessToken(token);
+    if (!profile) {
+      return sendError(res, 'Invalid bearer token', 401);
+    }
+    req.authProfile = profile;
+    try {
+      req.authUser = getAuthenticatedUser(req);
+    } catch (err) {
+      return sendError(res, err, 401);
+    }
+    next();
+  } catch (err) {
+    sendError(res, 'Invalid bearer token', 401);
+  }
+}
+
+app.use('/api', requireBearerAuth);
 
 function normalizeAppBase(rawBase = '/') {
   const value = String(rawBase || '/').trim();
@@ -49,27 +115,33 @@ function toUnixPath(p) {
   return p.split(path.sep).join('/');
 }
 
+function sanitizeUsername(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, '');
+}
+
 function sanitizeRelativePath(relativePath = '') {
   const raw = String(relativePath || '').trim();
   if (!raw || raw === '.') return '';
   return raw.replace(/^\/+|\/+$/g, '');
 }
 
-function resolveSafeAbsolutePath(relativePath = '') {
+function resolveSafeAbsolutePath(userRoot, relativePath = '') {
   const cleanPath = sanitizeRelativePath(relativePath);
-  const absolutePath = path.resolve(volumeRoot, cleanPath);
-  const rootWithSep = volumeRoot.endsWith(path.sep) ? volumeRoot : `${volumeRoot}${path.sep}`;
+  const absolutePath = path.resolve(userRoot, cleanPath);
+  const rootWithSep = userRoot.endsWith(path.sep) ? userRoot : `${userRoot}${path.sep}`;
 
-  if (absolutePath !== volumeRoot && !absolutePath.startsWith(rootWithSep)) {
+  if (absolutePath !== userRoot && !absolutePath.startsWith(rootWithSep)) {
     throw new Error('Invalid path outside of mounted volume');
   }
 
   return absolutePath;
 }
 
-function toRelativePath(absolutePath) {
-  if (absolutePath === volumeRoot) return '';
-  return toUnixPath(path.relative(volumeRoot, absolutePath));
+function toRelativePath(userRoot, absolutePath) {
+  if (absolutePath === userRoot) return '';
+  return toUnixPath(path.relative(userRoot, absolutePath));
 }
 
 async function ensureVolumeRoot() {
@@ -93,8 +165,35 @@ async function ensureSharedApiAsset() {
   }
 }
 
-async function listDirectory(relativePath = '') {
-  const absoluteDir = resolveSafeAbsolutePath(relativePath);
+function getAuthenticatedUser(req) {
+  const profile = req.authProfile || {};
+  const baseIdentity =
+    profile.preferred_username ||
+    profile.username ||
+    (typeof profile.email === 'string' ? profile.email.split('@')[0] : '') ||
+    profile.sub ||
+    '';
+  const username = sanitizeUsername(baseIdentity);
+  console.debug('Authenticated user profile:', { profile, derivedUsername: username });
+  if (!username) {
+    throw new Error('Authenticated user is missing a valid username claim');
+  }
+  return { profile, username };
+}
+
+function getUserVolumeRoot(req) {
+  const { username } = req.authUser || getAuthenticatedUser(req);
+  return path.join(volumeRoot, username);
+}
+
+async function ensureUserVolumeRoot(req) {
+  const userRoot = getUserVolumeRoot(req);
+  await fs.mkdir(userRoot, { recursive: true });
+  return userRoot;
+}
+
+async function listDirectory(userRoot, relativePath = '') {
+  const absoluteDir = resolveSafeAbsolutePath(userRoot, relativePath);
   const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
 
   const detailed = await Promise.all(
@@ -103,7 +202,7 @@ async function listDirectory(relativePath = '') {
       const st = await fs.stat(abs);
       return {
         name: entry.name,
-        relativePath: toRelativePath(abs),
+        relativePath: toRelativePath(userRoot, abs),
         type: entry.isDirectory() ? 'directory' : 'file',
         size: st.size,
         updatedAt: st.mtime.toISOString(),
@@ -149,15 +248,16 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/list', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const currentPath = sanitizeRelativePath(req.query.path || '');
-    const absolute = resolveSafeAbsolutePath(currentPath);
+    const absolute = resolveSafeAbsolutePath(userRoot, currentPath);
     const st = await fs.stat(absolute);
 
     if (!st.isDirectory()) {
       return sendError(res, 'Path is not a directory', 400);
     }
 
-    const items = await listDirectory(currentPath);
+    const items = await listDirectory(userRoot, currentPath);
     res.json({
       currentPath,
       parentPath: currentPath ? toUnixPath(path.dirname(currentPath)) === '.' ? '' : toUnixPath(path.dirname(currentPath)) : null,
@@ -170,13 +270,14 @@ app.get('/api/list', async (req, res) => {
 
 app.post('/api/folder', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const { path: currentPath = '', name } = req.body || {};
     if (!name || typeof name !== 'string') {
       return sendError(res, 'Folder name is required', 400);
     }
 
     const targetRelative = sanitizeRelativePath(path.join(sanitizeRelativePath(currentPath), name));
-    const targetAbs = resolveSafeAbsolutePath(targetRelative);
+    const targetAbs = resolveSafeAbsolutePath(userRoot, targetRelative);
     await fs.mkdir(targetAbs, { recursive: false });
     res.status(201).json({ ok: true, relativePath: targetRelative });
   } catch (err) {
@@ -186,8 +287,9 @@ app.post('/api/folder', async (req, res) => {
 
 app.post('/api/upload', upload.array('files'), async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const currentPath = sanitizeRelativePath(req.body.path || '');
-    const targetDir = resolveSafeAbsolutePath(currentPath);
+    const targetDir = resolveSafeAbsolutePath(userRoot, currentPath);
     const st = await fs.stat(targetDir);
 
     if (!st.isDirectory()) {
@@ -201,8 +303,10 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
 
     await Promise.all(
       files.map(async (file) => {
-        const targetAbs = resolveSafeAbsolutePath(path.join(currentPath, file.originalname));
-        await fs.writeFile(targetAbs, file.buffer);
+        if (file.size > maxBinaryFileBytes) {
+          throw new Error(`File too large (max ${maxBinaryFileBytes} bytes)`);
+        }
+        await fs.writeFile(resolveSafeAbsolutePath(userRoot, path.join(currentPath, file.originalname)), file.buffer);
       })
     );
 
@@ -214,8 +318,9 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
 
 app.get('/api/download', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const relativePath = sanitizeRelativePath(req.query.path || '');
-    const fileAbs = resolveSafeAbsolutePath(relativePath);
+    const fileAbs = resolveSafeAbsolutePath(userRoot, relativePath);
     const st = await fs.stat(fileAbs);
 
     if (!st.isFile()) {
@@ -233,8 +338,9 @@ app.get('/api/download', async (req, res) => {
 
 app.get('/api/raw', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const relativePath = sanitizeRelativePath(req.query.path || '');
-    const fileAbs = resolveSafeAbsolutePath(relativePath);
+    const fileAbs = resolveSafeAbsolutePath(userRoot, relativePath);
     const st = await fs.stat(fileAbs);
 
     if (!st.isFile()) {
@@ -251,6 +357,7 @@ app.get('/api/raw', async (req, res) => {
 
 app.post('/api/archive', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const { paths, archiveName } = req.body || {};
     if (!Array.isArray(paths) || paths.length === 0) {
       return sendError(res, 'paths must be a non-empty array', 400);
@@ -282,7 +389,7 @@ app.post('/api/archive', async (req, res) => {
     archive.pipe(res);
 
     for (const relativePath of sanitized) {
-      const absolutePath = resolveSafeAbsolutePath(relativePath);
+      const absolutePath = resolveSafeAbsolutePath(userRoot, relativePath);
       const st = await fs.stat(absolutePath);
       if (st.isDirectory()) {
         archive.directory(absolutePath, relativePath);
@@ -299,12 +406,13 @@ app.post('/api/archive', async (req, res) => {
 
 app.delete('/api/item', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const relativePath = sanitizeRelativePath(req.query.path || '');
     if (!relativePath) {
       return sendError(res, 'Cannot delete volume root', 400);
     }
 
-    const itemAbs = resolveSafeAbsolutePath(relativePath);
+    const itemAbs = resolveSafeAbsolutePath(userRoot, relativePath);
     await fs.rm(itemAbs, { recursive: true, force: false });
     res.json({ ok: true });
   } catch (err) {
@@ -314,6 +422,7 @@ app.delete('/api/item', async (req, res) => {
 
 app.patch('/api/rename', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const { path: relativePath, newName } = req.body || {};
     const cleanRelative = sanitizeRelativePath(relativePath || '');
 
@@ -324,10 +433,10 @@ app.patch('/api/rename', async (req, res) => {
       return sendError(res, 'newName is required', 400);
     }
 
-    const sourceAbs = resolveSafeAbsolutePath(cleanRelative);
+    const sourceAbs = resolveSafeAbsolutePath(userRoot, cleanRelative);
     const parentRel = toUnixPath(path.dirname(cleanRelative)) === '.' ? '' : toUnixPath(path.dirname(cleanRelative));
     const targetRel = sanitizeRelativePath(path.join(parentRel, newName));
-    const targetAbs = resolveSafeAbsolutePath(targetRel);
+    const targetAbs = resolveSafeAbsolutePath(userRoot, targetRel);
 
     await fs.rename(sourceAbs, targetAbs);
     res.json({ ok: true, relativePath: targetRel });
@@ -338,13 +447,14 @@ app.patch('/api/rename', async (req, res) => {
 
 app.patch('/api/move', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const { paths, targetPath = '' } = req.body || {};
     if (!Array.isArray(paths) || paths.length === 0) {
       return sendError(res, 'paths must be a non-empty array', 400);
     }
 
     const cleanTarget = sanitizeRelativePath(targetPath);
-    const targetAbs = resolveSafeAbsolutePath(cleanTarget);
+    const targetAbs = resolveSafeAbsolutePath(userRoot, cleanTarget);
     const targetStat = await fs.stat(targetAbs);
     if (!targetStat.isDirectory()) {
       return sendError(res, 'Target path is not a directory', 400);
@@ -356,10 +466,10 @@ app.patch('/api/move', async (req, res) => {
     }
 
     for (const sourcePath of sanitizedPaths) {
-      const sourceAbs = resolveSafeAbsolutePath(sourcePath);
+      const sourceAbs = resolveSafeAbsolutePath(userRoot, sourcePath);
       const sourceStat = await fs.stat(sourceAbs);
       const destinationRel = sanitizeRelativePath(path.join(cleanTarget, path.basename(sourcePath)));
-      const destinationAbs = resolveSafeAbsolutePath(destinationRel);
+      const destinationAbs = resolveSafeAbsolutePath(userRoot, destinationRel);
 
       if (destinationRel === sourcePath) {
         return sendError(res, `Source already in destination: ${sourcePath}`, 400);
@@ -377,9 +487,9 @@ app.patch('/api/move', async (req, res) => {
 
     await Promise.all(
       sanitizedPaths.map(async (sourcePath) => {
-        const sourceAbs = resolveSafeAbsolutePath(sourcePath);
+        const sourceAbs = resolveSafeAbsolutePath(userRoot, sourcePath);
         const destinationRel = sanitizeRelativePath(path.join(cleanTarget, path.basename(sourcePath)));
-        const destinationAbs = resolveSafeAbsolutePath(destinationRel);
+        const destinationAbs = resolveSafeAbsolutePath(userRoot, destinationRel);
         await fs.rename(sourceAbs, destinationAbs);
       })
     );
@@ -392,49 +502,51 @@ app.patch('/api/move', async (req, res) => {
 
 app.get('/api/file-content', async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const relativePath = sanitizeRelativePath(req.query.path || '');
-    const fileAbs = resolveSafeAbsolutePath(relativePath);
+    const fileAbs = resolveSafeAbsolutePath(userRoot, relativePath);
     const st = await fs.stat(fileAbs);
 
     if (!st.isFile()) {
       return sendError(res, 'Path is not a file', 400);
     }
 
-    if (st.size > fileContentLimitBytes) {
-      return sendError(res, `File too large to edit (max ${fileContentLimitBytes} bytes)`, 413);
+    if (st.size > maxBinaryFileBytes) {
+      return sendError(res, `File too large to read (max ${maxBinaryFileBytes} bytes)`, 413);
     }
 
-    const content = await fs.readFile(fileAbs, 'utf8');
-    res.json({ path: relativePath, content, size: st.size });
+    const content = await fs.readFile(fileAbs);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', String(content.byteLength));
+    res.setHeader('X-File-Path', relativePath);
+    res.send(content);
   } catch (err) {
     sendError(res, err, 400);
   }
 });
 
-app.put('/api/file-content', textFileContentParser, async (req, res) => {
+app.put('/api/file-content', binaryFileContentParser, async (req, res) => {
   try {
+    const userRoot = await ensureUserVolumeRoot(req);
     const relativePath = req.query.path || req.body?.path || '';
     const cleanRelative = sanitizeRelativePath(relativePath);
-    const content = typeof req.body === 'string' ? req.body : req.body?.content;
+    const content = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
 
     if (!cleanRelative) {
       return sendError(res, 'Invalid file path', 400);
     }
-    if (typeof content !== 'string') {
-      return sendError(res, 'content must be a string', 400);
-    }
-    if (Buffer.byteLength(content, 'utf8') > fileContentLimitBytes) {
-      return sendError(res, `File too large to save (max ${fileContentLimitBytes} bytes)`, 413);
+    if (content.byteLength > maxBinaryFileBytes) {
+      return sendError(res, `File too large to save (max ${maxBinaryFileBytes} bytes)`, 413);
     }
 
-    const fileAbs = resolveSafeAbsolutePath(cleanRelative);
+    const fileAbs = resolveSafeAbsolutePath(userRoot, cleanRelative);
     const st = await fs.stat(fileAbs);
 
     if (!st.isFile()) {
       return sendError(res, 'Path is not a file', 400);
     }
 
-    await fs.writeFile(fileAbs, content, 'utf8');
+    await fs.writeFile(fileAbs, content);
     res.json({ ok: true });
   } catch (err) {
     sendError(res, err, 400);
@@ -489,18 +601,29 @@ app.get(`${appBase === '/' ? '' : appBase}*`, async (req, res, next) => {
 });
 
 app.use((err, _req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return sendError(res, `File too large (max ${maxBinaryFileBytes} bytes)`, 413);
+  }
   if (err?.type === 'entity.too.large') {
-    return sendError(res, `Request body too large (max ${fileContentLimitBytes} bytes for file content)`, 413);
+    return sendError(res, `Request body too large (max ${maxBinaryFileBytes} bytes)`, 413);
   }
   next(err);
 });
 
-Promise.all([ensureVolumeRoot(), ensureClientDist(), ensureSharedApiAsset()])
+Promise.all([ensureVolumeRoot()])
   .then(() => {
+    Promise.allSettled([ensureClientDist(), ensureSharedApiAsset()]).then((results) => {
+      const hasStaticIssues = results.some((item) => item.status === 'rejected');
+      if (hasStaticIssues) {
+        console.warn('Static client assets not available at startup; API mode is still active.');
+      }
+    });
+
     app.listen(port, () => {
       console.log(`File server API listening on http://localhost:${port}`);
       console.log(`Mounted volume root: ${volumeRoot}`);
       console.log(`Serving client from ${clientDistPath} on base ${appBase}`);
+      console.log(`OAuth issuer for bearer validation: ${oauthIssuer}`);
     });
   })
   .catch((err) => {

@@ -13,9 +13,39 @@ import {
   uploadFiles,
 } from './api';
 
+const OAUTH_ISSUER = String(import.meta.env.VITE_OAUTH_ISSUER || 'http://localhost:9000').replace(/\/+$/, '');
+const OAUTH_CLIENT_ID = import.meta.env.VITE_OAUTH_CLIENT_ID || 'fileserver-web';
+const OAUTH_SCOPE = import.meta.env.VITE_OAUTH_SCOPE || 'openid profile email offline_access';
+const OAUTH_WIDGET_URL = import.meta.env.VITE_OAUTH_COMPONENT_URL || `${OAUTH_ISSUER}/app/assets/authWidget.js`;
+const OAUTH_EVENT_NAME = 'oauth-widget:profile';
+
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 const TEXT_EXTENSIONS = new Set(['txt', 'md', 'json', 'yaml', 'yml', 'xml', 'csv', 'log', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'sh', 'py']);
 const INLINE_EDITABLE_EXTENSIONS = new Set(['html', 'txt', 'json', 'js']);
+let oauthWidgetScriptPromise = null;
+
+function loadOAuthWidgetScript() {
+  if (oauthWidgetScriptPromise) return oauthWidgetScriptPromise;
+
+  oauthWidgetScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-auth-widget="true"][src="${OAUTH_WIDGET_URL}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Impossibile caricare authWidget.js')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = OAUTH_WIDGET_URL;
+    script.type = 'module';
+    script.dataset.authWidget = 'true';
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error('Impossibile caricare authWidget.js')), { once: true });
+    document.head.append(script);
+  });
+
+  return oauthWidgetScriptPromise;
+}
 
 function formatSize(bytes) {
   if (bytes === 0) return '0 B';
@@ -120,7 +150,7 @@ function Icon({ name }) {
   return <svg {...common} aria-hidden>{paths[name] || null}</svg>;
 }
 
-export default function App() {
+function FileserverApp() {
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -672,5 +702,78 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  const bundledWidgetRootRef = useRef(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const mountTarget = bundledWidgetRootRef.current;
+
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    window.__AUTH_WIDGET_CONFIG__ = {
+      ...(window.__AUTH_WIDGET_CONFIG__ || {}),
+      issuer: OAUTH_ISSUER,
+      clientId: OAUTH_CLIENT_ID,
+      origin: window.location.origin,
+      redirectUri,
+      postLogoutRedirectUri: redirectUri,
+      scope: OAUTH_SCOPE,
+    };
+
+    if (mountTarget) {
+      mountTarget.id = 'app';
+    }
+
+    function onProfileEvent(event) {
+      if (!active) return;
+      setProfile(event.detail?.profile || null);
+      setAuthReady(true);
+      setAuthError('');
+    }
+
+    window.addEventListener(OAUTH_EVENT_NAME, onProfileEvent);
+
+    loadOAuthWidgetScript()
+      .then(() => {
+        if (!active) return;
+        setAuthReady(true);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setAuthError(err.message || 'Errore inizializzazione autenticazione');
+        setAuthReady(true);
+      });
+
+    return () => {
+      active = false;
+      window.removeEventListener(OAUTH_EVENT_NAME, onProfileEvent);
+      if (mountTarget?.id === 'app') {
+        mountTarget.removeAttribute('id');
+      }
+    };
+  }, []);
+
+  return (
+    <>
+      <div ref={bundledWidgetRootRef} />
+      {profile ? (
+        <FileserverApp />
+      ) : (
+        <div className="auth-guard">
+          <div className="auth-guard-card">
+            <h1>Accesso richiesto</h1>
+            {!authReady && <p>Verifica sessione OAuth in corso...</p>}
+            {authReady && !authError && <p>Effettua login con il widget OAuth per vedere l&apos;applicazione.</p>}
+            {authError && <p className="error">{authError}</p>}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

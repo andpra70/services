@@ -22,9 +22,25 @@
   function createClient(options) {
     var config = options || {};
     var apiBase = trimTrailingSlash(config.apiBase || '/api');
+    var bearerToken = typeof config.bearerToken === 'string' ? config.bearerToken : '';
+    var getAccessToken = typeof config.getAccessToken === 'function'
+      ? config.getAccessToken
+      : function () { return bearerToken; };
+
+    function withAuthHeaders(headers) {
+      var merged = Object.assign({}, headers || {});
+      var token = String(getAccessToken() || '').trim();
+      if (token) {
+        merged.Authorization = 'Bearer ' + token;
+      }
+      return merged;
+    }
 
     async function api(path, requestOptions) {
-      var response = await fetch(apiBase + path, requestOptions || {});
+      var optionsWithAuth = Object.assign({}, requestOptions || {}, {
+        headers: withAuthHeaders(requestOptions && requestOptions.headers)
+      });
+      var response = await fetch(apiBase + path, optionsWithAuth);
 
       if (!response.ok) {
         var message = 'Request failed: ' + response.status;
@@ -67,6 +83,10 @@
         return new Promise(function (resolve, reject) {
           var xhr = new XMLHttpRequest();
           xhr.open('POST', apiBase + '/upload');
+          var token = String(getAccessToken() || '').trim();
+          if (token) {
+            xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+          }
 
           xhr.onload = function () {
             if (xhr.status < 200 || xhr.status >= 300) {
@@ -137,13 +157,22 @@
         };
       },
       loadFileContent: function (path) {
-        return api('/file-content?' + toQuery({ path: path }));
+        return api('/file-content?' + toQuery({ path: path })).then(async function (response) {
+          var buffer = await response.arrayBuffer();
+          var decoder = new TextDecoder('utf-8');
+          return {
+            path: path,
+            content: decoder.decode(buffer),
+            size: buffer.byteLength
+          };
+        });
       },
       saveFileContent: function (path, content) {
+        var payload = content instanceof Uint8Array ? content : new TextEncoder().encode(String(content == null ? '' : content));
         return api('/file-content?' + toQuery({ path: path }), {
           method: 'PUT',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: content
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: payload
         });
       },
       printPdf: async function (html, filename) {

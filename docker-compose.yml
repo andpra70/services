@@ -8,6 +8,8 @@ services:
         APP_GID: 1000
         VITE_API_BASE: /api
         VITE_APP_BASE: ./
+        VITE_OAUTH_ISSUER: http://localhost:9000
+        VITE_OAUTH_STORAGE_KEY: oauth-example
     container_name: fileserver
     restart: unless-stopped
     ports:
@@ -19,5 +21,8 @@ services:
       VOLUME_ROOT: /data
       CORS_ORIGIN: http://localhost:8080
       MAX_EDITABLE_BYTES: 26214400
+      MAX_BINARY_FILE_BYTES: 52428800
+      OAUTH_ISSUER: http://localhost:9000
+      TOKEN_VALIDATION_CACHE_TTL_MS: 15000
     volumes:
       - ./data/files:/data

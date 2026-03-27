@@ -1,9 +1,39 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const OAUTH_STORAGE_KEYS = [
+  import.meta.env.VITE_OAUTH_STORAGE_KEY || 'oauth-example',
+  'oauth-authWidget',
+  'oauth-example',
+  'fileserver-oauth-widget',
+  'oauth-widget',
+];
+
+function getAccessToken() {
+  for (const storageKey of OAUTH_STORAGE_KEYS) {
+    try {
+      const payload = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+      if (typeof payload?.tokens?.access_token === 'string') {
+        return payload.tokens.access_token;
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return '';
+}
+
+function withAuthHeaders(inputHeaders = {}) {
+  const headers = new Headers(inputHeaders);
+  const token = getAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return headers;
+}
 
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: options.headers || {},
+    headers: withAuthHeaders(options.headers),
   });
 
   if (!res.ok) {
@@ -45,6 +75,10 @@ export async function uploadFiles(path, files, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/upload`);
+    const token = getAccessToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
 
     xhr.onload = () => {
       if (xhr.status < 200 || xhr.status >= 300) {
@@ -128,15 +162,25 @@ export async function createArchive(paths, archiveName = 'archive.zip') {
 
 export function loadFileContent(path) {
   const query = new URLSearchParams({ path });
-  return api(`/file-content?${query.toString()}`);
+  return api(`/file-content?${query.toString()}`).then(async (res) => {
+    const buffer = await res.arrayBuffer();
+    const decoder = new TextDecoder('utf-8');
+    return {
+      path,
+      content: decoder.decode(buffer),
+      size: buffer.byteLength,
+    };
+  });
 }
 
 export function saveFileContent(path, content) {
   const query = new URLSearchParams({ path });
+  const encoder = new TextEncoder();
+  const payload = content instanceof Uint8Array ? content : encoder.encode(String(content));
   return api(`/file-content?${query.toString()}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: content,
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: payload,
   });
 }
 

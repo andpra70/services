@@ -19,6 +19,32 @@ body {
   min-height: 100vh;
 }
 
+.auth-guard {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-guard-card {
+  width: min(520px, 100%);
+  background: #ffffff;
+  border: 1px solid #cfd8e4;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(31, 41, 51, 0.08);
+}
+
+.auth-guard-card h1 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+}
+
+.auth-guard-card p {
+  margin: 0;
+  color: #304355;
+}
+
 .desktop {
   width: 98vw;
   min-height: 100vh;

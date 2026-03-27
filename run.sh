@@ -13,6 +13,7 @@ CONTAINER_PORT="${CONTAINER_PORT:-8080}"
 DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data/files}"
 APP_UID="${APP_UID:-1000}"
 APP_GID="${APP_GID:-1000}"
+OAUTH_ISSUER="${OAUTH_ISSUER:-http://localhost:9000}"
 FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${TAG}"
 
 mkdir -p "${DATA_DIR}"
@@ -34,6 +35,7 @@ docker run -d \
   -e VOLUME_ROOT=/data \
   -e CORS_ORIGIN="http://localhost:${HOST_PORT}" \
   -e MAX_EDITABLE_BYTES=26214400 \
+  -e OAUTH_ISSUER="${OAUTH_ISSUER}" \
   -v "${DATA_DIR}:/data" \
   "${FULL_IMAGE}"
 

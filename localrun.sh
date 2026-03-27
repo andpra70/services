@@ -7,6 +7,7 @@ SERVER_DIR="${SCRIPT_DIR}/server"
 SERVER_PORT="${SERVER_PORT:-4000}"
 CLIENT_PORT="${CLIENT_PORT:-5173}"
 VOLUME_ROOT="${VOLUME_ROOT:-${SCRIPT_DIR}/data/files}"
+OAUTH_ISSUER="${OAUTH_ISSUER:-http://localhost:9000}"
 PIDS=()
 
 cleanup() {
@@ -26,6 +27,7 @@ mkdir -p "${VOLUME_ROOT}"
   PORT="${SERVER_PORT}" \
   VOLUME_ROOT="${VOLUME_ROOT}" \
   CORS_ORIGIN="http://localhost:${CLIENT_PORT}" \
+  OAUTH_ISSUER="${OAUTH_ISSUER}" \
   npm run dev
 ) &
 PIDS+=("$!")

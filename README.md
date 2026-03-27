@@ -43,6 +43,14 @@ Variabili principali:
 - `CORS_ORIGIN`: origin del frontend in sviluppo locale
 - `MAX_EDITABLE_BYTES`: limite per editor testo
 - `MAX_FILE_CONTENT_BYTES`: limite massimo per lettura/scrittura contenuti testuali via API (`/api/file-content`); se non impostato usa `MAX_EDITABLE_BYTES`
+- `MAX_BINARY_FILE_BYTES`: limite massimo upload/salvataggio binario (`/api/upload`, `/api/file-content`), default `52428800` (50MB)
+- `OAUTH_ISSUER`: issuer OAuth/OIDC usato dal backend per validare i bearer token (`GET /me`)
+- `TOKEN_VALIDATION_CACHE_TTL_MS`: cache token lato backend (ms) per ridurre round-trip al provider
+- `VITE_OAUTH_ISSUER`: issuer OAuth/OIDC usato dal frontend bundled (`authWidget.js`)
+- `VITE_OAUTH_CLIENT_ID`: client id OAuth usato dal widget frontend (default `fileserver-web`)
+- `VITE_OAUTH_SCOPE`: scope OAuth usati dal widget frontend
+- `VITE_OAUTH_STORAGE_KEY`: chiave `sessionStorage` prioritaria per lettura token (default/fallback: `oauth-authWidget`)
+- `VITE_OAUTH_COMPONENT_URL`: URL del bundle React auth (default `${VITE_OAUTH_ISSUER}/app/assets/authWidget.js`)
 
 ## Avvio locale (senza Docker)
 
@@ -60,7 +68,8 @@ docker compose up --build
 
 Servizio unico: `http://localhost:8080`
 
-Il volume dati locale viene montato da `./data/files` a `/data` nel container. Non e' presente autenticazione: il frontend chiama direttamente le API esposte dallo stesso servizio.
+Il volume dati locale viene montato da `./data/files` a `/data` nel container. L'accesso API e' protetto da bearer token OAuth: se non autenticato il frontend mostra solo la schermata login.
+I file sono isolati per utente autenticato: ogni utente vede e modifica solo `VOLUME_ROOT/<username>/**`.
 
 Il container gira come utente non-root con UID/GID `1000:1000`. La directory host `./data/files` deve quindi essere scrivibile da `1000:1000`.
 
@@ -87,7 +96,8 @@ Libreria browser cross-site:
 <script src="http://localhost:8080/assets/api.js"></script>
 <script>
   const client = window.FileserverApi.createClient({
-    apiBase: 'http://localhost:8080/api'
+    apiBase: 'http://localhost:8080/api',
+    getAccessToken: () => sessionStorage.getItem('my-token')
   });
 </script>
 ```
@@ -98,7 +108,8 @@ Libreria browser cross-site:
 <script src="http://localhost:8080/assets/api.js"></script>
 <script>
   const client = window.FileserverApi.createClient({
-    apiBase: 'http://localhost:8080/api'
+    apiBase: 'http://localhost:8080/api',
+    getAccessToken: () => sessionStorage.getItem('my-token')
   });
 
   client.listDirectory('').then((result) => {
@@ -265,6 +276,9 @@ client.printPdf(`
 - `GET /api/file-content?path=`
 - `PUT /api/file-content`
 - `POST /api/print-pdf`
+
+Tutte le API richiedono `Authorization: Bearer <access_token>`.
+Le operazioni di caricamento/salvataggio file usano payload binario con limite 50MB (configurabile via `MAX_BINARY_FILE_BYTES`).
 
 ## Note di sicurezza
 
