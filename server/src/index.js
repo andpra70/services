@@ -23,6 +23,7 @@ const clientDistPath = path.resolve(
 );
 const appBase = normalizeAppBase(process.env.APP_BASE || '/');
 const sharedApiAssetPath = path.join(clientDistPath, 'assets', 'api.js');
+const publicReadOnlyPrefix = '/api/download';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -78,6 +79,7 @@ async function validateAccessToken(token) {
 
 async function requireBearerAuth(req, res, next) {
   if (req.method === 'OPTIONS') return next();
+  if (req.method === 'GET' && String(req.path || '').startsWith('/download/')) return next();
 
   const token = getBearerTokenFromRequest(req);
   if (!token) {
@@ -241,6 +243,27 @@ function setCrossSiteAssetHeaders(res) {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Cache-Control', 'public, max-age=300');
 }
+
+app.get(`${publicReadOnlyPrefix}/*`, async (req, res) => {
+  try {
+    const requestedPath = sanitizeRelativePath(req.params[0] || '');
+    if (!requestedPath) {
+      return sendError(res, 'Invalid file path', 400);
+    }
+
+    const fileAbs = resolveSafeAbsolutePath(volumeRoot, requestedPath);
+    const st = await fs.stat(fileAbs);
+    if (!st.isFile()) {
+      return sendError(res, 'Path is not a file', 400);
+    }
+
+    res.setHeader('Content-Type', detectMimeType(fileAbs));
+    res.setHeader('Content-Disposition', 'inline');
+    createReadStream(fileAbs).pipe(res);
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, volumeRoot });
