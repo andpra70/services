@@ -40,7 +40,7 @@ Variabili principali:
 - `VOLUME_ROOT`: path assoluto del volume montato
 - `PORT`: porta del servizio finale (`8080` nel container, `4000` in dev server locale)
 - `APP_BASE`: base path della SPA servita dal backend
-- `CORS_ORIGIN`: origin del frontend in sviluppo locale
+- `CORS_ORIGIN`: origin consentite CORS (singola origin, lista separata da virgole, oppure `*`)
 - `MAX_EDITABLE_BYTES`: limite per editor testo
 - `MAX_FILE_CONTENT_BYTES`: limite massimo per lettura/scrittura contenuti testuali via API (`/api/file-content`); se non impostato usa `MAX_EDITABLE_BYTES`
 - `MAX_BINARY_FILE_BYTES`: limite massimo upload/salvataggio binario (`/api/upload`, `/api/file-content`), default `52428800` (50MB)
@@ -51,6 +51,18 @@ Variabili principali:
 - `VITE_OAUTH_SCOPE`: scope OAuth usati dal widget frontend
 - `VITE_OAUTH_STORAGE_KEY`: chiave `sessionStorage` prioritaria per lettura token (default/fallback: `oauth-authWidget`)
 - `VITE_OAUTH_COMPONENT_URL`: URL del bundle React auth (default `${VITE_OAUTH_ISSUER}/app/assets/authWidget.js`)
+
+Per build/deploy Docker, le variabili `VITE_*` sono lette in fase di build immagine (non a runtime). Se `VITE_OAUTH_ISSUER` non e' valorizzata, il frontend usa fallback runtime:
+- host locale (`localhost/127.0.0.1`): `http://localhost:9000`
+- host non locale (es. reverse proxy): `${window.location.origin}/oauth-server`
+
+Esempio deploy prod:
+
+```bash
+VITE_OAUTH_ISSUER="https://oauth.example.com" \
+VITE_OAUTH_COMPONENT_URL="https://oauth.example.com/app/assets/authWidget.js" \
+./deploy.sh
+```
 
 ## Avvio locale (senza Docker)
 

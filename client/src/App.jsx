@@ -13,10 +13,53 @@ import {
   uploadFiles,
 } from './api';
 
-const OAUTH_ISSUER = String(import.meta.env.VITE_OAUTH_ISSUER || 'http://localhost:9000').replace(/\/+$/, '');
+function stripTrailingSlashes(value = '') {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isLoopbackHost(hostname = '') {
+  const normalized = String(hostname || '').trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isLocalhostIssuer(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(resolveAbsoluteUrl(raw), window.location.origin);
+    return isLoopbackHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function resolveAbsoluteUrl(rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value) return '';
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(value) || value.startsWith('//')) return value;
+  if (value.startsWith('/')) return new URL(value, window.location.origin).toString();
+  if (value.includes('.')) return `https://${value}`;
+  return new URL(value, window.location.origin).toString();
+}
+
+function resolveOAuthIssuer(rawIssuer) {
+  const isLocalDevHost = isLoopbackHost(window.location.hostname);
+  const fallbackIssuer = isLocalDevHost ? 'http://localhost:9000' : `${window.location.origin}/oauth-server`;
+  const shouldIgnoreIssuer = !isLocalDevHost && isLocalhostIssuer(rawIssuer);
+  const resolved = resolveAbsoluteUrl(shouldIgnoreIssuer ? fallbackIssuer : (rawIssuer || fallbackIssuer)) || fallbackIssuer;
+  return stripTrailingSlashes(resolved);
+}
+
+function resolveOAuthWidgetUrl(rawUrl, issuer) {
+  const resolved = resolveAbsoluteUrl(rawUrl);
+  if (resolved) return stripTrailingSlashes(resolved);
+  return `${issuer}/app/assets/authWidget.js`;
+}
+
+const OAUTH_ISSUER = resolveOAuthIssuer(import.meta.env.VITE_OAUTH_ISSUER);
 const OAUTH_CLIENT_ID = import.meta.env.VITE_OAUTH_CLIENT_ID || 'fileserver-web';
 const OAUTH_SCOPE = import.meta.env.VITE_OAUTH_SCOPE || 'openid profile email offline_access';
-const OAUTH_WIDGET_URL = import.meta.env.VITE_OAUTH_COMPONENT_URL || `${OAUTH_ISSUER}/app/assets/authWidget.js`;
+const OAUTH_WIDGET_URL = resolveOAuthWidgetUrl(import.meta.env.VITE_OAUTH_COMPONENT_URL, OAUTH_ISSUER);
 const OAUTH_EVENT_NAME = 'oauth-widget:profile';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);

@@ -15,6 +15,7 @@ const volumeRoot = path.resolve(process.env.VOLUME_ROOT || '/mnt/data');
 const maxEditableBytes = Number(process.env.MAX_EDITABLE_BYTES || 25 * 1024 * 1024);
 const maxBinaryFileBytes = Number(process.env.MAX_BINARY_FILE_BYTES || 50 * 1024 * 1024);
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const corsOriginList = parseCorsOrigins(corsOrigin);
 const oauthIssuer = String(process.env.OAUTH_ISSUER || 'http://localhost:9000').replace(/\/+$/, '');
 const tokenValidationCacheTtlMs = Number(process.env.TOKEN_VALIDATION_CACHE_TTL_MS || 15_000);
 const clientDistPath = path.resolve(
@@ -42,9 +43,32 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({ origin: corsOrigin }));
+app.use(
+  cors({
+    origin: createCorsOriginMatcher(corsOriginList),
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 const binaryFileContentParser = express.raw({ type: '*/*', limit: `${maxBinaryFileBytes}b` });
+
+function parseCorsOrigins(value = '') {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function createCorsOriginMatcher(allowedOrigins = []) {
+  if (allowedOrigins.includes('*')) return true;
+  const originSet = new Set(allowedOrigins);
+  return (requestOrigin, callback) => {
+    if (!requestOrigin) {
+      callback(null, true);
+      return;
+    }
+    callback(null, originSet.has(requestOrigin));
+  };
+}
 
 function getBearerTokenFromRequest(req) {
   const value = String(req.get('authorization') || '').trim();
@@ -646,6 +670,7 @@ Promise.all([ensureVolumeRoot()])
       console.log(`File server API listening on http://localhost:${port}`);
       console.log(`Mounted volume root: ${volumeRoot}`);
       console.log(`Serving client from ${clientDistPath} on base ${appBase}`);
+      console.log(`Allowed CORS origins: ${corsOriginList.join(', ') || '(none)'}`);
       console.log(`OAuth issuer for bearer validation: ${oauthIssuer}`);
     });
   })
