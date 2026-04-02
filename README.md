@@ -45,22 +45,33 @@ Variabili principali:
 - `MAX_FILE_CONTENT_BYTES`: limite massimo per lettura/scrittura contenuti testuali via API (`/api/file-content`); se non impostato usa `MAX_EDITABLE_BYTES`
 - `MAX_BINARY_FILE_BYTES`: limite massimo upload/salvataggio binario (`/api/upload`, `/api/file-content`), default `52428800` (50MB)
 - `OAUTH_ISSUER`: issuer OAuth/OIDC usato dal backend per validare i bearer token (`GET /me`)
+- `OAUTH_ALLOW_SELF_SIGNED_TLS`: se `true`, disabilita la verifica certificati TLS per chiamate HTTPS outbound del backend (solo dev/troubleshooting)
 - `TOKEN_VALIDATION_CACHE_TTL_MS`: cache token lato backend (ms) per ridurre round-trip al provider
 - `VITE_OAUTH_ISSUER`: issuer OAuth/OIDC usato dal frontend bundled (`authWidget.js`)
 - `VITE_OAUTH_CLIENT_ID`: client id OAuth usato dal widget frontend (default `fileserver-web`)
 - `VITE_OAUTH_SCOPE`: scope OAuth usati dal widget frontend
 - `VITE_OAUTH_STORAGE_KEY`: chiave `sessionStorage` prioritaria per lettura token (default/fallback: `oauth-authWidget`)
 - `VITE_OAUTH_COMPONENT_URL`: URL del bundle React auth (default `${VITE_OAUTH_ISSUER}/app/assets/authWidget.js`)
+- `VITE_OAUTH_REDIRECT_URI`: redirect URI esplicita usata dal widget (`redirect_uri` + `post_logout_redirect_uri`); default runtime `${window.location.origin}${window.location.pathname}`
+
+Context base applicazione: `APP_BASE=/fileserver/` (frontend + backend).
+
+Script con file env:
+- `./localrun.sh` carica `${PWD}/.env` (override con `ENV_FILE=/path/to/file`)
+- `./deploy.sh` carica `${PWD}/.env.prod` (override con `ENV_FILE=/path/to/file`)
+- `./run.sh` carica `${PWD}/.env.prod` (override con `ENV_FILE=/path/to/file`)
 
 Per build/deploy Docker, le variabili `VITE_*` sono lette in fase di build immagine (non a runtime). Se `VITE_OAUTH_ISSUER` non e' valorizzata, il frontend usa fallback runtime:
 - host locale (`localhost/127.0.0.1`): `http://localhost:9000`
 - host non locale (es. reverse proxy): `${window.location.origin}/oauth-server`
 
-Esempio deploy prod:
+Se in produzione `VITE_OAUTH_COMPONENT_URL` o `VITE_OAUTH_ISSUER` puntano a `localhost`, il frontend li ignora e usa il fallback runtime su `${window.location.origin}/oauth-server`.
+
+Importante: il backend valida i bearer token su `${OAUTH_ISSUER}/me` a runtime. In produzione `OAUTH_ISSUER` deve puntare al provider pubblico (es. `https://zanotti.iliadboxos.it:55443/oauth-server`), non a `localhost`.
+
+Deploy prod:
 
 ```bash
-VITE_OAUTH_ISSUER="https://oauth.example.com" \
-VITE_OAUTH_COMPONENT_URL="https://oauth.example.com/app/assets/authWidget.js" \
 ./deploy.sh
 ```
 
@@ -70,7 +81,7 @@ VITE_OAUTH_COMPONENT_URL="https://oauth.example.com/app/assets/authWidget.js" \
 ./localrun.sh
 ```
 
-Apri: `http://localhost:5173`
+Apri: `http://localhost:5173/fileserver/`
 
 ## Avvio con Docker Compose
 
@@ -78,7 +89,7 @@ Apri: `http://localhost:5173`
 docker compose up --build
 ```
 
-Servizio unico: `http://localhost:8080`
+Servizio unico: `http://localhost:8080/fileserver/`
 
 Il volume dati locale viene montato da `./data/files` a `/data` nel container. L'accesso API e' protetto da bearer token OAuth: se non autenticato il frontend mostra solo la schermata login.
 I file sono isolati per utente autenticato: ogni utente vede e modifica solo `VOLUME_ROOT/<username>/**`.

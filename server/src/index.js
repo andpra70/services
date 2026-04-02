@@ -17,7 +17,11 @@ const maxBinaryFileBytes = Number(process.env.MAX_BINARY_FILE_BYTES || 50 * 1024
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const corsOriginList = parseCorsOrigins(corsOrigin);
 const oauthIssuer = String(process.env.OAUTH_ISSUER || 'http://localhost:9000').replace(/\/+$/, '');
+const oauthAllowSelfSignedTls = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.OAUTH_ALLOW_SELF_SIGNED_TLS || '').trim().toLowerCase()
+);
 const tokenValidationCacheTtlMs = Number(process.env.TOKEN_VALIDATION_CACHE_TTL_MS || 15_000);
+const tokenValidationTimeoutMs = Number(process.env.TOKEN_VALIDATION_TIMEOUT_MS || 10_000);
 const clientDistPath = path.resolve(
   process.env.CLIENT_DIST ||
     path.join(path.dirname(fileURLToPath(import.meta.url)), '../../client-dist')
@@ -31,6 +35,11 @@ const upload = multer({
   limits: { fileSize: maxBinaryFileBytes },
 });
 const tokenValidationCache = new Map();
+
+if (oauthAllowSelfSignedTls) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  console.warn('WARNING: TLS certificate validation disabled for outbound HTTPS requests (OAUTH_ALLOW_SELF_SIGNED_TLS=true)');
+}
 
 app.use((req, res, next) => {
   const startedAt = Date.now();
@@ -76,27 +85,103 @@ function getBearerTokenFromRequest(req) {
   return match?.[1]?.trim() || '';
 }
 
+function headersToObject(headers) {
+  const output = {};
+  for (const [key, value] of headers.entries()) {
+    output[key] = value;
+  }
+  return output;
+}
+
 async function validateAccessToken(token) {
-  console.debug('Validating access token (truncated):', token.slice(0, 4) + '...');
+  const tokenPrefix = token.slice(0, 8);
+  console.debug('Validating access token (truncated):', `${tokenPrefix}...`);
   const cached = tokenValidationCache.get(token);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.profile;
   }
 
-  const response = await fetch(`${oauthIssuer}/me`, {
-    headers: { authorization: `Bearer ${token}` },
+  const url = `${oauthIssuer}/me`;
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), tokenValidationTimeoutMs);
+
+  console.info('OAuth /me request start', {
+    url,
+    method: 'GET',
+    timeoutMs: tokenValidationTimeoutMs,
+    authorizationPrefix: `${tokenPrefix}...`,
+  });
+
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const durationMs = Date.now() - startedAt;
+    if (err?.name === 'AbortError') {
+      console.warn('OAuth /me request timeout', { url, durationMs, timeoutMs: tokenValidationTimeoutMs });
+      return null;
+    }
+    console.warn('OAuth /me request failed', {
+      url,
+      durationMs,
+      name: err?.name || '',
+      code: err?.code || err?.cause?.code || '',
+      message: err?.message || String(err),
+      cause: err?.cause?.message || '',
+    });
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  const responseHeaders = headersToObject(response.headers);
+  let responseBody = '';
+  try {
+    responseBody = await response.text();
+  } catch {
+    responseBody = '';
+  }
+
+  console.info('OAuth /me response', {
+    url,
+    status: response.status,
+    statusText: response.statusText,
+    durationMs,
+    headers: responseHeaders,
+    bodyPreview: responseBody.slice(0, 500),
   });
 
   if (!response.ok) {
+    console.warn('Bearer token rejected by OAuth /me', {
+      status: response.status,
+      statusText: response.statusText,
+      oauthIssuer,
+      wwwAuthenticate: response.headers.get('www-authenticate') || '',
+      body: responseBody.slice(0, 500),
+    });
     return null;
   }
 
-  const profile = await response.json();
+  let profile = null;
+  try {
+    profile = responseBody ? JSON.parse(responseBody) : {};
+  } catch {
+    console.warn('OAuth /me returned non-JSON body for successful status', {
+      oauthIssuer,
+      bodyPreview: responseBody.slice(0, 500),
+    });
+    return null;
+  }
   tokenValidationCache.set(token, {
     profile,
     expiresAt: Date.now() + tokenValidationCacheTtlMs,
   });
-  console.debug('Validated access token (truncated):', token.slice(0, 4) + '...');
+  console.debug('Validated access token (truncated):', `${tokenPrefix}...`);
   console.debug('Token validation response profile:', profile);
   return profile;
 }
@@ -672,6 +757,8 @@ Promise.all([ensureVolumeRoot()])
       console.log(`Serving client from ${clientDistPath} on base ${appBase}`);
       console.log(`Allowed CORS origins: ${corsOriginList.join(', ') || '(none)'}`);
       console.log(`OAuth issuer for bearer validation: ${oauthIssuer}`);
+      console.log(`OAuth /me timeout (ms): ${tokenValidationTimeoutMs}`);
+      console.log(`OAuth self-signed TLS allowed: ${oauthAllowSelfSignedTls}`);
     });
   })
   .catch((err) => {

@@ -1,19 +1,37 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'api';
 const OAUTH_STORAGE_KEYS = [
-  import.meta.env.VITE_OAUTH_STORAGE_KEY || 'oauth-example',
+  import.meta.env.VITE_OAUTH_STORAGE_KEY || 'oauth-authWidget',
   'oauth-authWidget',
   'oauth-example',
   'fileserver-oauth-widget',
   'oauth-widget',
 ];
 
+function isLikelyExpired(tokenPayload = {}) {
+  const expRaw = tokenPayload?.tokens?.expires_at ?? tokenPayload?.expires_at ?? tokenPayload?.tokens?.exp ?? tokenPayload?.exp;
+  const exp = Number(expRaw);
+  if (!Number.isFinite(exp) || exp <= 0) return false;
+  const expMs = exp > 1e12 ? exp : exp * 1000;
+  return expMs <= Date.now();
+}
+
+function readAccessTokenFromPayload(payload = {}) {
+  const fromNested = payload?.tokens?.access_token;
+  if (typeof fromNested === 'string' && fromNested.trim()) return fromNested.trim();
+  const fromFlat = payload?.access_token;
+  if (typeof fromFlat === 'string' && fromFlat.trim()) return fromFlat.trim();
+  return '';
+}
+
 function getAccessToken() {
-  for (const storageKey of OAUTH_STORAGE_KEYS) {
+  const uniqueKeys = Array.from(new Set(OAUTH_STORAGE_KEYS.filter(Boolean)));
+  for (const storageKey of uniqueKeys) {
     try {
       const payload = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
-      if (typeof payload?.tokens?.access_token === 'string') {
-        return payload.tokens.access_token;
-      }
+      const token = readAccessTokenFromPayload(payload);
+      if (!token) continue;
+      if (isLikelyExpired(payload)) continue;
+      return token;
     } catch {
       // ignore parse errors
     }

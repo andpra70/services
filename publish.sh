@@ -2,5 +2,5 @@
 set -euo pipefail
 
 git add .
-git commit -m "Update watermarks site"
+git commit -m "Update fileserver site"
 git push

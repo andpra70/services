@@ -51,15 +51,23 @@ function resolveOAuthIssuer(rawIssuer) {
 }
 
 function resolveOAuthWidgetUrl(rawUrl, issuer) {
-  const resolved = resolveAbsoluteUrl(rawUrl);
+  const shouldIgnoreWidgetUrl = !isLoopbackHost(window.location.hostname) && isLocalhostIssuer(rawUrl);
+  const resolved = resolveAbsoluteUrl(shouldIgnoreWidgetUrl ? '' : rawUrl);
   if (resolved) return stripTrailingSlashes(resolved);
   return `${issuer}/app/assets/authWidget.js`;
+}
+
+function resolveOAuthRedirectUri(rawValue) {
+  const resolved = resolveAbsoluteUrl(rawValue);
+  if (resolved) return resolved;
+  return `${window.location.origin}${window.location.pathname}`;
 }
 
 const OAUTH_ISSUER = resolveOAuthIssuer(import.meta.env.VITE_OAUTH_ISSUER);
 const OAUTH_CLIENT_ID = import.meta.env.VITE_OAUTH_CLIENT_ID || 'fileserver-web';
 const OAUTH_SCOPE = import.meta.env.VITE_OAUTH_SCOPE || 'openid profile email offline_access';
 const OAUTH_WIDGET_URL = resolveOAuthWidgetUrl(import.meta.env.VITE_OAUTH_COMPONENT_URL, OAUTH_ISSUER);
+const OAUTH_REDIRECT_URI = resolveOAuthRedirectUri(import.meta.env.VITE_OAUTH_REDIRECT_URI);
 const OAUTH_EVENT_NAME = 'oauth-widget:profile';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
@@ -217,7 +225,8 @@ function FileserverApp() {
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items
+    const safeItems = Array.isArray(items) ? items : [];
+    return safeItems
       .filter((item) => !q || item.name.toLowerCase().includes(q))
       .sort((a, b) => compareItems(a, b, sortBy));
   }, [items, query, sortBy]);
@@ -250,8 +259,8 @@ function FileserverApp() {
     setError('');
     try {
       const data = await listDirectory(path);
-      setItems(data.items);
-      setCurrentPath(data.currentPath);
+      setItems(Array.isArray(data?.items) ? data.items : []);
+      setCurrentPath(typeof data?.currentPath === 'string' ? data.currentPath : '');
       setSelected(null);
       setSelectedPaths([]);
     } catch (err) {
@@ -758,14 +767,13 @@ export default function App() {
     let active = true;
     const mountTarget = bundledWidgetRootRef.current;
 
-    const redirectUri = `${window.location.origin}${window.location.pathname}`;
     window.__AUTH_WIDGET_CONFIG__ = {
       ...(window.__AUTH_WIDGET_CONFIG__ || {}),
       issuer: OAUTH_ISSUER,
       clientId: OAUTH_CLIENT_ID,
       origin: window.location.origin,
-      redirectUri,
-      postLogoutRedirectUri: redirectUri,
+      redirectUri: OAUTH_REDIRECT_URI,
+      postLogoutRedirectUri: OAUTH_REDIRECT_URI,
       scope: OAUTH_SCOPE,
     };
 

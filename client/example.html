@@ -138,7 +138,7 @@
         <h1>Fileserver API Example</h1>
         <p>Questa pagina usa <code>/assets/api.js</code> e mostra esempi pratici per tutte le API disponibili.</p>
         <label for="api-base">API base</label>
-        <input id="api-base" value="/api" />
+        <input id="api-base" value="api" />
         <div class="actions">
           <button id="apply-config" type="button">Applica configurazione</button>
         </div>
@@ -288,10 +288,10 @@
 
     <script src="/assets/api.js"></script>
     <script>
-      let client = window.FileserverApi.createClient({ apiBase: '/api' });
+      let client = window.FileserverApi.createClient({ apiBase: 'api' });
 
       function updateClient() {
-        const apiBase = document.getElementById('api-base').value || '/api';
+        const apiBase = document.getElementById('api-base').value || 'api';
         client = window.FileserverApi.createClient({ apiBase });
       }
 

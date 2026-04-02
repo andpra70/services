@@ -3,6 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
+ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"
+
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
 
 REGISTRY="${REGISTRY:-docker.io/andpra70}"
 IMAGE_NAME="${IMAGE_NAME:-fileserver}"
@@ -13,6 +21,7 @@ CONTAINER_PORT="${CONTAINER_PORT:-8080}"
 DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data/files}"
 APP_UID="${APP_UID:-1000}"
 APP_GID="${APP_GID:-1000}"
+APP_BASE="${APP_BASE:-/fileserver/}"
 OAUTH_ISSUER="${OAUTH_ISSUER:-http://localhost:9000}"
 CORS_ORIGIN="${CORS_ORIGIN:-http://localhost:${HOST_PORT}}"
 FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${TAG}"
@@ -31,7 +40,7 @@ docker run -d \
   --restart unless-stopped \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
   -e PORT="${CONTAINER_PORT}" \
-  -e APP_BASE=/ \
+  -e APP_BASE="${APP_BASE}" \
   -e CLIENT_DIST=/app/client-dist \
   -e VOLUME_ROOT=/data \
   -e CORS_ORIGIN="${CORS_ORIGIN}" \

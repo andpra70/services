@@ -21,7 +21,7 @@
 
   function createClient(options) {
     var config = options || {};
-    var apiBase = trimTrailingSlash(config.apiBase || '/api');
+    var apiBase = trimTrailingSlash(config.apiBase || 'api');
     var bearerToken = typeof config.bearerToken === 'string' ? config.bearerToken : '';
     var getAccessToken = typeof config.getAccessToken === 'function'
       ? config.getAccessToken

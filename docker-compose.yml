@@ -4,25 +4,27 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        APP_UID: 1000
-        APP_GID: 1000
-        VITE_API_BASE: /api
-        VITE_APP_BASE: ./
-        VITE_OAUTH_ISSUER: http://localhost:9000
-        VITE_OAUTH_STORAGE_KEY: oauth-example
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+        VITE_API_BASE: ${VITE_API_BASE:-api}
+        VITE_APP_BASE: ${VITE_APP_BASE:-/fileserver/}
+        VITE_OAUTH_ISSUER: ${VITE_OAUTH_ISSUER:-}
+        VITE_OAUTH_STORAGE_KEY: ${VITE_OAUTH_STORAGE_KEY:-oauth-authWidget}
+        VITE_OAUTH_COMPONENT_URL: ${VITE_OAUTH_COMPONENT_URL:-}
+        VITE_OAUTH_REDIRECT_URI: ${VITE_OAUTH_REDIRECT_URI:-}
     container_name: fileserver
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      PORT: 8080
-      APP_BASE: /
-      CLIENT_DIST: /app/client-dist
-      VOLUME_ROOT: /data
-      CORS_ORIGIN: http://localhost:8080
-      MAX_EDITABLE_BYTES: 26214400
-      MAX_BINARY_FILE_BYTES: 52428800
-      OAUTH_ISSUER: http://localhost:9000
-      TOKEN_VALIDATION_CACHE_TTL_MS: 15000
+      PORT: ${PORT:-8080}
+      APP_BASE: ${APP_BASE:-/fileserver/}
+      CLIENT_DIST: ${CLIENT_DIST:-/app/client-dist}
+      VOLUME_ROOT: ${VOLUME_ROOT:-/data}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      MAX_EDITABLE_BYTES: ${MAX_EDITABLE_BYTES:-26214400}
+      MAX_BINARY_FILE_BYTES: ${MAX_BINARY_FILE_BYTES:-52428800}
+      OAUTH_ISSUER: ${OAUTH_ISSUER:-http://localhost:9000}
+      TOKEN_VALIDATION_CACHE_TTL_MS: ${TOKEN_VALIDATION_CACHE_TTL_MS:-15000}
     volumes:
       - ./data/files:/data
