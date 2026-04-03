@@ -47,6 +47,9 @@ Variabili principali:
 - `OAUTH_ISSUER`: issuer OAuth/OIDC usato dal backend per validare i bearer token (`GET /me`)
 - `OAUTH_ALLOW_SELF_SIGNED_TLS`: se `true`, disabilita la verifica certificati TLS per chiamate HTTPS outbound del backend (solo dev/troubleshooting)
 - `TOKEN_VALIDATION_CACHE_TTL_MS`: cache token lato backend (ms) per ridurre round-trip al provider
+- `TOKEN_VALIDATION_TIMEOUT_MS`: timeout chiamata backend -> `${OAUTH_ISSUER}/me` (ms)
+- `TOKEN_VALIDATION_RETRY_ATTEMPTS`: tentativi massimi per validazione token in caso di errore rete/DNS transiente (`EAI_AGAIN`)
+- `TOKEN_VALIDATION_RETRY_DELAY_MS`: attesa tra retry validazione token (ms)
 - `VITE_OAUTH_ISSUER`: issuer OAuth/OIDC usato dal frontend bundled (`authWidget.js`)
 - `VITE_OAUTH_CLIENT_ID`: client id OAuth usato dal widget frontend (default `fileserver-web`)
 - `VITE_OAUTH_SCOPE`: scope OAuth usati dal widget frontend
@@ -291,6 +294,7 @@ client.printPdf(`
 - `GET /api/list?path=`
 - `POST /api/upload` (multipart field: `files`, body field: `path`)
 - `GET /api/download?path=`
+- `GET /api/download/*` (download pubblico read-only senza bearer)
 - `GET /api/raw?path=` (anteprima inline)
 - `POST /api/archive` (zip di file/cartelle)
 - `DELETE /api/item?path=`
@@ -300,8 +304,95 @@ client.printPdf(`
 - `PUT /api/file-content`
 - `POST /api/print-pdf`
 
-Tutte le API richiedono `Authorization: Bearer <access_token>`.
+Tutte le API `/api/*` richiedono `Authorization: Bearer <access_token>`, tranne `GET /api/download/*` che e' pubblico.
 Le operazioni di caricamento/salvataggio file usano payload binario con limite 50MB (configurabile via `MAX_BINARY_FILE_BYTES`).
+
+## Script Bash + curl (auth, list, upload, download)
+
+E' disponibile lo script `scripts/curl-auth-file-flow.sh` che esegue in sequenza:
+
+1. autenticazione OAuth (`POST ${OAUTH_ISSUER}/token`)
+2. lista file autenticata (`GET /api/list`)
+3. upload file autenticato (`POST /api/upload`)
+4. download autenticato dello stesso file (`GET /api/download?path=...`)
+5. download pubblico dello stesso file senza token (`GET /api/download/<username>/<path>`)
+
+Esempio:
+
+```bash
+FILESERVER_BASE_URL="http://localhost:8080" \
+OAUTH_ISSUER="http://localhost:9000" \
+TOKEN_FORM='grant_type=password&client_id=fileserver-web&username=demo&password=demo&scope=openid%20profile%20email' \
+./scripts/curl-auth-file-flow.sh ./README.md
+```
+
+Variabili principali dello script:
+
+- `TOKEN_FORM`: body `application/x-www-form-urlencoded` usato per ottenere `access_token` (adatta grant/client/credenziali al tuo provider)
+- `ACCESS_TOKEN`: se valorizzato, lo script salta `POST /token` e usa direttamente questo bearer token
+- `TARGET_DIR`: cartella di destinazione nel fileserver (default root utente)
+- `SOURCE_FILE`: file locale da caricare (in alternativa primo argomento script)
+- `UPLOAD_FILENAME`: nome remoto del file caricato
+- `OUTPUT_DIR`: cartella locale dove salvare i download di test
+- `ALLOW_SELF_SIGNED_TLS`: default `1`; usa `--insecure` nelle curl dello script per ignorare certificati self-signed (`0` per riabilitare verifica TLS)
+
+## Script Node.js semplice (stesso flusso)
+
+E' disponibile anche la versione Node.js minimale: `scripts/node-auth-file-flow.mjs`.
+
+Esempio:
+
+```bash
+FILESERVER_BASE_URL="http://localhost:8080" \
+OAUTH_ISSUER="http://localhost:9000" \
+TOKEN_FORM='grant_type=password&client_id=fileserver-web&username=demo&password=demo&scope=openid%20profile%20email' \
+node ./scripts/node-auth-file-flow.mjs ./README.md
+```
+
+Variabili principali: stesse della versione bash (`TOKEN_FORM`, `ACCESS_TOKEN`, `TARGET_DIR`, `SOURCE_FILE`, `UPLOAD_FILENAME`, `OUTPUT_DIR`, `TOKEN_URL`, `ME_URL`, `ALLOW_SELF_SIGNED_TLS`). Con `ALLOW_SELF_SIGNED_TLS=1` (default) imposta `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+
+### Curl manuali equivalenti
+
+Autenticazione:
+
+```bash
+curl -X POST "http://localhost:9000/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data 'grant_type=password&client_id=fileserver-web&username=demo&password=demo&scope=openid%20profile%20email'
+```
+
+Lista file autenticata:
+
+```bash
+curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  "http://localhost:8080/api/list?path="
+```
+
+Upload autenticato:
+
+```bash
+curl -X POST "http://localhost:8080/api/upload" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -F "path=" \
+  -F "files=@./README.md;filename=README.md"
+```
+
+Download autenticato:
+
+```bash
+curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  "http://localhost:8080/api/download?path=README.md" \
+  -o ./download-auth-README.md
+```
+
+Download senza autenticazione dello stesso file (path pubblico):
+
+```bash
+curl "http://localhost:8080/api/download/<username_sanitizzato>/README.md" \
+  -o ./download-public-README.md
+```
+
+`<username_sanitizzato>` e' il nome utente derivato dalle claim OAuth (`preferred_username`, `username`, `email`, `sub`) con caratteri non consentiti sostituiti da `_`.
 
 ## Note di sicurezza
 

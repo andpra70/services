@@ -22,6 +22,8 @@ const oauthAllowSelfSignedTls = ['1', 'true', 'yes', 'on'].includes(
 );
 const tokenValidationCacheTtlMs = Number(process.env.TOKEN_VALIDATION_CACHE_TTL_MS || 15_000);
 const tokenValidationTimeoutMs = Number(process.env.TOKEN_VALIDATION_TIMEOUT_MS || 10_000);
+const tokenValidationRetryAttempts = Math.max(1, Number(process.env.TOKEN_VALIDATION_RETRY_ATTEMPTS || 3));
+const tokenValidationRetryDelayMs = Math.max(0, Number(process.env.TOKEN_VALIDATION_RETRY_DELAY_MS || 300));
 const clientDistPath = path.resolve(
   process.env.CLIENT_DIST ||
     path.join(path.dirname(fileURLToPath(import.meta.url)), '../../client-dist')
@@ -93,6 +95,10 @@ function headersToObject(headers) {
   return output;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function validateAccessToken(token) {
   const tokenPrefix = token.slice(0, 8);
   console.debug('Validating access token (truncated):', `${tokenPrefix}...`);
@@ -114,28 +120,49 @@ async function validateAccessToken(token) {
   });
 
   let response;
-  try {
-    response = await fetch(url, {
-      headers: { authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    });
-  } catch (err) {
-    const durationMs = Date.now() - startedAt;
-    if (err?.name === 'AbortError') {
-      console.warn('OAuth /me request timeout', { url, durationMs, timeoutMs: tokenValidationTimeoutMs });
-      return null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= tokenValidationRetryAttempts; attempt += 1) {
+    try {
+      response = await fetch(url, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      break;
+    } catch (err) {
+      lastError = err;
+      const durationMs = Date.now() - startedAt;
+      const code = err?.code || err?.cause?.code || '';
+      if (err?.name === 'AbortError') {
+        console.warn('OAuth /me request timeout', { url, durationMs, timeoutMs: tokenValidationTimeoutMs, attempt });
+        clearTimeout(timeout);
+        return null;
+      }
+      console.warn('OAuth /me request failed', {
+        url,
+        durationMs,
+        attempt,
+        attempts: tokenValidationRetryAttempts,
+        name: err?.name || '',
+        code,
+        message: err?.message || String(err),
+        cause: err?.cause?.message || '',
+      });
+      const isTransientDns = code === 'EAI_AGAIN';
+      if (!isTransientDns || attempt >= tokenValidationRetryAttempts) {
+        clearTimeout(timeout);
+        return null;
+      }
+      await sleep(tokenValidationRetryDelayMs);
     }
-    console.warn('OAuth /me request failed', {
+  }
+  clearTimeout(timeout);
+  if (!response) {
+    console.warn('OAuth /me request exhausted retries without response', {
       url,
-      durationMs,
-      name: err?.name || '',
-      code: err?.code || err?.cause?.code || '',
-      message: err?.message || String(err),
-      cause: err?.cause?.message || '',
+      attempts: tokenValidationRetryAttempts,
+      lastError: lastError?.message || '',
     });
     return null;
-  } finally {
-    clearTimeout(timeout);
   }
 
   const durationMs = Date.now() - startedAt;
@@ -758,6 +785,7 @@ Promise.all([ensureVolumeRoot()])
       console.log(`Allowed CORS origins: ${corsOriginList.join(', ') || '(none)'}`);
       console.log(`OAuth issuer for bearer validation: ${oauthIssuer}`);
       console.log(`OAuth /me timeout (ms): ${tokenValidationTimeoutMs}`);
+      console.log(`OAuth /me retries: attempts=${tokenValidationRetryAttempts}, delayMs=${tokenValidationRetryDelayMs}`);
       console.log(`OAuth self-signed TLS allowed: ${oauthAllowSelfSignedTls}`);
     });
   })
