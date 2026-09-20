@@ -6,64 +6,20 @@ COPY client/package.json client/package-lock.json ./
 RUN npm ci
 
 COPY client/index.html ./
-COPY client/example.html ./
-COPY client/public ./public
 COPY client/vite.config.js ./
 COPY client/src ./src
 
-ARG VITE_API_BASE=api
 ARG VITE_APP_BASE=./
-ARG VITE_OAUTH_ISSUER=
-ARG VITE_OAUTH_STORAGE_KEY=fileserver-oauth-widget
-ARG VITE_OAUTH_COMPONENT_URL=
-ARG VITE_OAUTH_REDIRECT_URI=
-ENV VITE_API_BASE=${VITE_API_BASE}
 ENV VITE_APP_BASE=${VITE_APP_BASE}
-ENV VITE_OAUTH_ISSUER=${VITE_OAUTH_ISSUER}
-ENV VITE_OAUTH_STORAGE_KEY=${VITE_OAUTH_STORAGE_KEY}
-ENV VITE_OAUTH_COMPONENT_URL=${VITE_OAUTH_COMPONENT_URL}
-ENV VITE_OAUTH_REDIRECT_URI=${VITE_OAUTH_REDIRECT_URI}
 
 RUN npm run build
 
-FROM node:20-alpine AS server-deps
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 
-WORKDIR /build/server
-
-COPY server/package.json server/package-lock.json ./
-RUN npm ci --omit=dev
-
-FROM node:20-alpine
-
-WORKDIR /app
-
-ARG APP_UID=1000
-ARG APP_GID=1000
-
-RUN apk add --no-cache weasyprint font-noto ttf-freefont
-
-COPY server/package.json ./server/package.json
-COPY server/src ./server/src
-COPY --from=server-deps /build/server/node_modules ./server/node_modules
-COPY --from=client-build /build/client/dist ./client-dist
-
-RUN mkdir -p /data && \
-    chown -R "${APP_UID}:${APP_GID}" /app /data
-
-ENV NODE_ENV=production
-ENV PORT=8080
-ENV VOLUME_ROOT=/data
-ENV CLIENT_DIST=/app/client-dist
-ENV APP_BASE=/
-ENV CORS_ORIGIN=https://zanotti.iliadboxos.it:55443/
-ENV MAX_EDITABLE_BYTES=1048576
-ENV MAX_BINARY_FILE_BYTES=52428800
-ENV OAUTH_ISSUER=https://zanotti.iliadboxos.it:55443/oauth-server/
-ENV TOKEN_VALIDATION_CACHE_TTL_MS=15000
-ENV WEASYPRINT_BIN=/usr/bin/weasyprint
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=client-build /build/client/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
-USER ${APP_UID}:${APP_GID}
-
-CMD ["node", "server/src/index.js"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --quiet --spider http://127.0.0.1:8080/healthz || exit 1

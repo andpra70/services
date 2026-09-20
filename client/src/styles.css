@@ -45,6 +45,12 @@ body {
   color: #304355;
 }
 
+.auth-panel { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border-bottom: 1px solid #d8dee8; background: #fff; }
+.auth-panel div { display: grid; gap: 4px; margin-right: auto; }
+.auth-panel span { color: #617284; font-size: 0.8rem; }
+.vfs-list { min-height: 420px; }
+.empty-list, .loading { padding: 18px; color: #617284; }
+
 .desktop {
   width: 98vw;
   min-height: 100vh;
