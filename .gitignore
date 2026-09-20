@@ -16,3 +16,7 @@ npm-debug.log*
 # oauth data
 oauth-server/data/*.db
 oauth-server/data/*.db-*
+
+# JWT verification key (mounted at runtime)
+keys/*.pem
+!keys/.gitkeep

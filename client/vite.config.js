@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 const appBase = process.env.VITE_APP_BASE || './';
 const frontControllerUrl = process.env.VITE_FRONT_CONTROLLER_URL || 'https://localhost';
+const vfsServerUrl = process.env.VITE_VFS_SERVER_URL || frontControllerUrl;
 
 export default defineConfig({
   preview: {
@@ -22,9 +23,10 @@ export default defineConfig({
         secure: false,
       },
       '/vfs': {
-        target: frontControllerUrl,
+        target: vfsServerUrl,
         changeOrigin: true,
         secure: false,
+        rewrite: vfsServerUrl === frontControllerUrl ? undefined : (path) => path.replace(/^\/vfs/, ''),
       },
     },
   },

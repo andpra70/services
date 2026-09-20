@@ -19,6 +19,17 @@ CONTAINER_NAME="${CONTAINER_NAME:-fileserver}"
 HOST_PORT="${HOST_PORT:-8080}"
 CONTAINER_PORT="${CONTAINER_PORT:-8080}"
 FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${TAG}"
+NETWORK="${NETWORK:-front-controller_internal-services}"
+REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
+S3_ENDPOINT="${S3_ENDPOINT:-http://minio:9000}"
+S3_REGION="${S3_REGION:-us-east-1}"
+S3_BUCKET="${S3_BUCKET:-public-assets}"
+S3_ACCESS_KEY="${S3_ACCESS_KEY:-vfsadmin}"
+: "${S3_SECRET_KEY:?Set S3_SECRET_KEY in the environment or ENV_FILE}"
+JWT_ISSUER="${JWT_ISSUER:-vfs-auth}"
+JWT_AUDIENCE="${JWT_AUDIENCE:-vfs-clients}"
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://localhost}"
+PUBLIC_KEY_FILE="${PUBLIC_KEY_FILE:-${SCRIPT_DIR}/keys/public.pem}"
 
 if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
   docker stop "${CONTAINER_NAME}" >/dev/null
@@ -30,9 +41,23 @@ docker pull "${FULL_IMAGE}"
 docker run -d \
   --name "${CONTAINER_NAME}" \
   --restart unless-stopped \
+  --network "${NETWORK}" \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
+  -e PORT="${CONTAINER_PORT}" \
+  -e REDIS_URL="${REDIS_URL}" \
+  -e S3_ENDPOINT="${S3_ENDPOINT}" \
+  -e S3_REGION="${S3_REGION}" \
+  -e S3_BUCKET="${S3_BUCKET}" \
+  -e S3_ACCESS_KEY="${S3_ACCESS_KEY}" \
+  -e S3_SECRET_KEY="${S3_SECRET_KEY}" \
+  -e JWT_ISSUER="${JWT_ISSUER}" \
+  -e JWT_AUDIENCE="${JWT_AUDIENCE}" \
+  -e ALLOWED_ORIGINS="${ALLOWED_ORIGINS}" \
+  -e PUBLIC_KEY_PATH=/run/secrets/public.pem \
+  -v "${PUBLIC_KEY_FILE}:/run/secrets/public.pem:ro" \
   "${FULL_IMAGE}"
 
 printf 'Container: %s\n' "${CONTAINER_NAME}"
 printf 'Image: %s\n' "${FULL_IMAGE}"
 printf 'URL: http://localhost:%s\n' "${HOST_PORT}"
+printf 'VFS widget: http://localhost:%s/widget.js\n' "${HOST_PORT}"

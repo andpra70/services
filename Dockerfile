@@ -1,25 +1,29 @@
-FROM node:20-alpine AS client-build
+FROM node:20-alpine AS build
 
-WORKDIR /build/client
-
-COPY client/package.json client/package-lock.json ./
+WORKDIR /app
+COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY client/index.html ./
-COPY client/vite.config.js ./
-COPY client/src ./src
+COPY client/package.json client/package-lock.json ./client/
+RUN npm --prefix client ci
+COPY client ./client
 
 ARG VITE_APP_BASE=./
 ENV VITE_APP_BASE=${VITE_APP_BASE}
+RUN npm run build:client
 
-RUN npm run build
+FROM node:20-alpine AS runtime
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+WORKDIR /app
+ENV NODE_ENV=production PORT=8080
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --chown=node:node server ./server
+COPY --chown=node:node public ./public
+COPY --from=build --chown=node:node /app/client/dist ./client-dist
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=client-build /build/client/dist /usr/share/nginx/html
-
+USER node
 EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --spider http://127.0.0.1:8080/healthz || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=5 \
+  CMD node -e "Promise.all([fetch('http://127.0.0.1:8080/healthz'),fetch('http://127.0.0.1:8080/widget.js')]).then(r=>process.exit(r.every(x=>x.ok)?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "server/server.js"]

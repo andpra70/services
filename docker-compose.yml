@@ -5,8 +5,75 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_APP_BASE: ${VITE_APP_BASE:-/fileserver/}
-    image: docker.io/andpra70/fileserver:latest
-    container_name: fileserver
+    image: ${FILESERVER_IMAGE:-docker.io/andpra70/fileserver:latest}
+    container_name: ${FILESERVER_CONTAINER_NAME:-fileserver}
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     ports:
-      - "8080:8080"
+      - "${FILESERVER_HOST_PORT:-8080}:8080"
+    environment:
+      PORT: 8080
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-public-assets}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-vfsadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-vfs-change-me}
+      JWT_ISSUER: ${JWT_ISSUER:-vfs-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-vfs-clients}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173,https://localhost}
+      PUBLIC_KEY_PATH: /run/secrets/public.pem
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
+    volumes:
+      - ./keys/public.pem:/run/secrets/public.pem:ro
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - fileserver-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vfsadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-vfs-change-me}
+    volumes:
+      - fileserver-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-02-08T19-14-21Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vfsadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-vfs-change-me}
+      S3_BUCKET: ${S3_BUCKET:-public-assets}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing "local/$$S3_BUCKET" &&
+        mc anonymous set download "local/$$S3_BUCKET"
+
+volumes:
+  fileserver-redis:
+  fileserver-minio:
