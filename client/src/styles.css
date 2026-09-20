@@ -257,7 +257,7 @@ td {
 
 th:first-child,
 td:first-child {
-  width: 36px;
+  width: auto;
 }
 
 th {
@@ -400,6 +400,74 @@ tr:hover {
 
 td:last-child {
   white-space: nowrap;
+}
+
+.file-name-button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 5px;
+  border-color: transparent;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  word-break: break-word;
+}
+
+.file-name-button:hover {
+  border-color: #b8c7d7;
+  background: #eaf2fc;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d8e0e8;
+}
+
+.preview-header > div {
+  min-width: 0;
+  margin-right: auto;
+}
+
+.preview-header h3 {
+  margin: 0 0 5px;
+  overflow-wrap: anywhere;
+}
+
+.preview-header span {
+  color: #617284;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.preview-body {
+  min-height: 180px;
+  max-height: 75vh;
+  overflow: auto;
+  padding-top: 12px;
+}
+
+.preview-error {
+  border: 1px solid #efc7c7;
+  border-radius: 8px;
+}
+
+.preview-warning {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid #e6ce91;
+  border-radius: 8px;
+  background: #fff8e2;
+  color: #6d5414;
+  font-size: 0.82rem;
 }
 
 .modal-actions {
