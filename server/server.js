@@ -221,7 +221,7 @@ async function listPublicDirectory(rawPath, res, next) {
       name: entry.Key.split("/").pop(), path: entry.Key, type: "file", size: entry.Size,
       lastModified: entry.LastModified?.toISOString(), publicUrl: `/vfs/public/${entry.Key.split("/").map(encodeURIComponent).join("/")}`,
     }));
-    res.set("Cache-Control", "public, max-age=30");
+    res.set("Cache-Control", "no-store");
     return res.json({ path: directory, items: [...directories, ...files] });
   } catch (error) { return next(error); }
 }

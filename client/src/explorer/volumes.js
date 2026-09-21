@@ -9,6 +9,7 @@ const normalize = (listing, volume) => ({
 
 const normalizeBase = (value) => String(value || "/vfs").replace(/\/+$/, "");
 const encodePath = (value) => String(value || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+const PUBLIC_LIST_API_VERSION = "2";
 
 export function createVfsUrls(globalObject) {
   const base = normalizeBase(globalObject.VFS_BASE_URL);
@@ -16,7 +17,7 @@ export function createVfsUrls(globalObject) {
   return {
     publicDirectory(path) {
       const encoded = encodePath(path);
-      return `${publicBase}/${encoded ? `${encoded}/` : ""}`;
+      return `${publicBase}/${encoded ? `${encoded}/` : ""}?vfs-list=${PUBLIC_LIST_API_VERSION}`;
     },
     publicFile(path) {
       return `${publicBase}/${encodePath(path)}`;
@@ -41,7 +42,7 @@ export function createVolumes(globalObject, getApi) {
       available: () => true,
       async list(path) {
         const normalized = String(path || "").replace(/^\/+|\/+$/g, "");
-        const response = await fetch(urls.publicDirectory(normalized));
+        const response = await fetch(urls.publicDirectory(normalized), { cache: "no-store" });
         if (!response.ok) throw new Error(`Elenco pubblico non disponibile (${response.status})`);
         const listing = normalize(await response.json(), "public");
         listing.items = listing.items.map((item) => item.type === "file" ? { ...item, url: urls.publicFile(item.path) } : item);
