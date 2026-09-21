@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const parentPath = (path) => String(path || '').split('/').filter(Boolean).slice(0, -1).join('/');
 const formatSize = (bytes) => !bytes ? '—' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 
-export default function FileExplorerModal({ initialPath, initialVolume, options, volumes, onResolve }) {
+export default function FileExplorerModal({ initialPath, initialVolume, options, volumes, onLocationChange, onResolve }) {
   const [volume, setVolume] = useState(initialVolume);
   const [path, setPath] = useState(initialPath);
   const [items, setItems] = useState([]);
@@ -25,6 +25,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
     try {
       const listing = await volumes[nextVolume].list(nextPath);
       setVolume(nextVolume); setPath(listing.path); setItems(listing.items);
+      onLocationChange({ volume: nextVolume, path: listing.path });
       if (addHistory) {
         const next = [...history.slice(0, historyIndex + 1), { volume: nextVolume, path: listing.path }];
         setHistory(next); setHistoryIndex(next.length - 1);

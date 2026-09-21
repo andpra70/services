@@ -45,6 +45,12 @@ const target = await VfsWidget.open("minicms/sites", {
 Il volume privato compare quando esiste una sessione OAuth; quello pubblico è
 sempre consultabile e rimane in sola lettura. La chiusura restituisce `null`.
 
+L'ultima directory aperta viene conservata in `localStorage`: alle aperture
+successive, anche dopo il riavvio del browser, `open()` senza argomenti riparte
+da volume e path precedenti. Un percorso passato esplicitamente ha sempre la
+precedenza. La chiave predefinita è `vfs.explorer.location.v1` e può essere
+personalizzata impostando `window.VFS_EXPLORER_STORAGE_KEY` prima del widget.
+
 ## Configurazione
 
 | Variabile | Significato |
