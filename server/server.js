@@ -226,7 +226,6 @@ async function listPublicDirectory(rawPath, res, next) {
   } catch (error) { return next(error); }
 }
 
-app.get("/public", (_req, res) => res.redirect(308, "/public/"));
 app.get("/public/", (req, res, next) => listPublicDirectory("", res, next));
 app.get("/public/*", async (req, res, next) => {
   try {
