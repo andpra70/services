@@ -8,13 +8,17 @@ button, input { font: inherit; }
 .vfs-toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #dbe2ea; background: #f7f9fc; }
 .vfs-toolbar button, .vfs-dialog footer button, .vfs-dialog input { border: 1px solid #bdc9d6; border-radius: 7px; padding: 6px 9px; background: #fff; color: #243241; }
 .vfs-toolbar button { cursor: pointer; }.vfs-toolbar button:disabled { opacity: .45; cursor: default; }
+.vfs-toolbar .vfs-glyph { width: 32px; height: 30px; padding: 0; font-weight: 700; }
 .vfs-toolbar > input { width: 190px; margin-left: auto; }
 .vfs-crumbs { flex: 1; min-width: 0; white-space: nowrap; overflow: auto; }.vfs-crumbs button { border: 0; background: transparent; padding: 4px; color: #285f9b; }
 .vfs-main { min-height: 0; display: grid; grid-template-columns: 185px 1fr; }
 .vfs-main aside { padding: 10px; border-right: 1px solid #dbe2ea; background: #f3f6fa; display: flex; flex-direction: column; gap: 5px; }
 .vfs-main aside button { border: 0; border-radius: 7px; padding: 9px; text-align: left; background: transparent; cursor: pointer; }.vfs-main aside button.active { background: #dceafb; color: #174f8d; }
 .vfs-main main { position: relative; overflow: auto; background: #fff; }
+.vfs-drop-hint { position: absolute; inset: 16px; z-index: 4; display: grid; place-items: center; border: 2px dashed #4c86bd; border-radius: 10px; background: rgba(38, 103, 165, .88); color: #fff; font-size: 15px; font-weight: 700; pointer-events: none; }
+.vfs-main.drag-active main { overflow: hidden; }
 .vfs-main table { width: 100%; border-collapse: collapse; font-size: 13px; }.vfs-main th { position: sticky; top: 0; padding: 9px; text-align: left; background: #eef2f7; border-bottom: 1px solid #ccd6e1; }.vfs-main td { padding: 9px; border-bottom: 1px solid #edf0f4; }.vfs-main tr { cursor: default; }.vfs-main tr:hover { background: #f4f8fc; }.vfs-main tr.selected { background: #dcecff; }
+.vfs-actions { display: inline-flex; gap: 5px; }.vfs-actions button { width: 28px; height: 28px; padding: 0; border: 1px solid #bdc9d6; border-radius: 6px; background: #fff; color: #243241; font-weight: 700; cursor: pointer; }.vfs-actions button:hover { background: #edf4fb; }.vfs-actions button.danger { border-color: #d7aaaa; color: #972f2f; background: #fff7f7; }
 .vfs-volumes { display: grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 15px; padding: 28px; }.vfs-volumes button { min-height: 115px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; display: grid; place-items: center; gap: 6px; font-size: 30px; cursor: pointer; }.vfs-volumes strong { font-size: 14px; }
 .vfs-status, .vfs-error { margin: 18px; }.vfs-error { color: #a12622; }
 .vfs-dialog footer { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid #dbe2ea; background: #f7f9fc; }.vfs-dialog footer span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #607080; }.vfs-dialog footer input { width: min(300px, 40vw); }.vfs-dialog footer button { cursor: pointer; }.vfs-dialog footer button.primary { background: #2767a5; border-color: #20598f; color: #fff; }.vfs-dialog footer button:disabled { opacity: .45; cursor: default; }

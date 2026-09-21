@@ -32,6 +32,10 @@ export function createVolumes(globalObject, getApi) {
       writable: true,
       available: () => Boolean(globalObject.VfsAuth?.getSession?.()),
       list: async (path) => normalize(await getApi().list(path), "private"),
+      upload: (path, file) => getApi().upload(path, file),
+      mkdir: (path) => getApi().mkdir(path),
+      rename: (sourcePath, targetPath, type) => getApi().rename(sourcePath, targetPath, type),
+      remove: (item) => item.type === "directory" ? getApi().rmdir(item.path, { recursive: true }) : getApi().rmfile(item.path),
       async fetch(path) {
         const token = await globalObject.VfsAuth.getAccessToken();
         return fetch(getApi().downloadUrl(path, false), { headers: { Authorization: `Bearer ${token}` } });

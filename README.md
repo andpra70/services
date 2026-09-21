@@ -51,6 +51,10 @@ da volume e path precedenti. Un percorso passato esplicitamente ha sempre la
 precedenza. La chiave predefinita è `vfs.explorer.location.v1` e può essere
 personalizzata impostando `window.VFS_EXPLORER_STORAGE_KEY` prima del widget.
 
+Nel volume privato è possibile trascinare uno o più file sulla directory
+corrente per caricarli; al termine il listing viene aggiornato automaticamente.
+Il drag-and-drop rimane disabilitato nel volume pubblico in sola lettura.
+
 ## Configurazione
 
 | Variabile | Significato |

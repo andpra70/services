@@ -1,11 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { formatFileSize, parentDirectory } from '../models';
+import GlyphButton from './GlyphButton';
+import VolumeBreadcrumbs from './VolumeBreadcrumbs';
 
-export default function FileList({ currentPath, items, loading, uploading, operationPath, error, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onDelete, onRename }) {
+export default function FileList({ volume, currentPath, items, loading, uploading, operationPath, error, onVolumeChange, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onDelete, onRename }) {
   const picker = useRef(null);
   const [query, setQuery] = useState('');
   const [dragDepth, setDragDepth] = useState(0);
   const dragActive = dragDepth > 0;
+  const readOnly = volume === 'public';
   const visibleItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return items.filter((item) => !normalized || item.name.toLowerCase().includes(normalized));
@@ -19,7 +22,7 @@ export default function FileList({ currentPath, items, loading, uploading, opera
 
   function handleDragEnter(event) {
     event.preventDefault();
-    if (event.dataTransfer?.types?.includes('Files')) setDragDepth((depth) => depth + 1);
+    if (!readOnly && event.dataTransfer?.types?.includes('Files')) setDragDepth((depth) => depth + 1);
   }
 
   function handleDragLeave(event) {
@@ -36,7 +39,7 @@ export default function FileList({ currentPath, items, loading, uploading, opera
     event.preventDefault();
     setDragDepth(0);
     const files = event.dataTransfer?.files;
-    if (files?.length) await onUpload(files);
+    if (!readOnly && files?.length) await onUpload(files);
   }
 
   async function createDirectory() {
@@ -47,17 +50,15 @@ export default function FileList({ currentPath, items, loading, uploading, opera
   return (
     <>
       <section className="toolbar">
-        <button type="button" onClick={onRefresh} disabled={loading}>Aggiorna</button>
-        <button type="button" onClick={() => onOpen('')} disabled={!currentPath || loading}>Root</button>
-        <button type="button" onClick={() => onOpen(parentDirectory(currentPath))} disabled={!currentPath || loading}>Su</button>
-        <button type="button" onClick={createDirectory}>Nuova cartella</button>
-        <button type="button" onClick={() => picker.current?.click()} disabled={uploading}>
-          {uploading ? 'Caricamento…' : 'Carica file'}
-        </button>
+        <GlyphButton glyph="↻" label="Aggiorna" onClick={onRefresh} disabled={loading} />
+        <GlyphButton glyph="⌂" label="Vai alla root" onClick={() => onOpen('')} disabled={!currentPath || loading} />
+        <GlyphButton glyph="↑" label="Directory superiore" onClick={() => onOpen(parentDirectory(currentPath))} disabled={!currentPath || loading} />
+        {!readOnly && <GlyphButton glyph="⊞" label="Nuova cartella" onClick={createDirectory} />}
+        {!readOnly && <GlyphButton glyph={uploading ? '…' : '⇧'} label={uploading ? 'Caricamento in corso' : 'Carica file'} onClick={() => picker.current?.click()} disabled={uploading} />}
         <input ref={picker} type="file" multiple hidden onChange={chooseFile} />
         <input className="search-input" type="search" placeholder="Filtra la lista" value={query} onChange={(event) => setQuery(event.target.value)} />
       </section>
-      <nav className="breadcrumbs"><strong>VFS2:</strong> /{currentPath}</nav>
+      <VolumeBreadcrumbs volume={volume} path={currentPath} disabled={loading} onVolumeChange={onVolumeChange} onOpen={onOpen} />
       {error && <p className="error">{error}</p>}
       <main
         className={`content vfs-list${dragActive ? ' drag-active' : ''}`}
@@ -90,15 +91,13 @@ export default function FileList({ currentPath, items, loading, uploading, opera
                 <td>
                   <span className="row-actions">
                     {item.type === 'directory'
-                      ? <button type="button" onClick={() => onOpen(item.path)} disabled={operationPath === item.path}>Apri</button>
+                      ? <GlyphButton glyph="↳" label={`Apri ${item.name}`} onClick={() => onOpen(item.path)} disabled={operationPath === item.path} />
                       : <>
-                        <button type="button" onClick={() => onPreview(item)} disabled={operationPath === item.path}>Anteprima</button>
-                        <button type="button" onClick={() => onDownload(item)} disabled={operationPath === item.path}>Scarica</button>
+                        <GlyphButton glyph="◉" label={`Anteprima ${item.name}`} onClick={() => onPreview(item)} disabled={operationPath === item.path} />
+                        <GlyphButton glyph="⇩" label={`Scarica ${item.name}`} onClick={() => onDownload(item)} disabled={operationPath === item.path} />
                       </>}
-                    <button type="button" onClick={() => onRename(item)} disabled={operationPath === item.path}>Rinomina</button>
-                    <button className="danger" type="button" onClick={() => onDelete(item)} disabled={operationPath === item.path}>
-                      {operationPath === item.path ? 'Attendi…' : 'Elimina'}
-                    </button>
+                    {!readOnly && <GlyphButton glyph="✎" label={`Rinomina ${item.name}`} onClick={() => onRename(item)} disabled={operationPath === item.path} />}
+                    {!readOnly && <GlyphButton glyph={operationPath === item.path ? '…' : '×'} label={operationPath === item.path ? `Operazione in corso su ${item.name}` : `Elimina ${item.name}`} className="danger" onClick={() => onDelete(item)} disabled={operationPath === item.path} />}
                   </span>
                 </td>
               </tr>

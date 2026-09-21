@@ -44,18 +44,40 @@ export async function listDirectory(path = '') {
   return normalizeVfsListing(await window.VfsWidget.list(path));
 }
 
-export async function downloadFile(item) {
-  const token = await window.VfsAuth.getAccessToken();
-  const response = await fetch(window.VfsWidget.downloadUrl(item.path, true), { headers: { Authorization: `Bearer ${token}` } });
+const vfsBase = () => String(window.VFS_BASE_URL || '/vfs').replace(/\/+$/, '');
+const encodePath = (value) => String(value || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+
+export async function listPublicDirectory(path = '') {
+  const encoded = encodePath(path);
+  const response = await fetch(`${vfsBase()}/public/${encoded ? `${encoded}/` : ''}?vfs-list=2`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Elenco pubblico non disponibile (${response.status})`);
+  return normalizeVfsListing(await response.json());
+}
+
+function publicFileUrl(path) {
+  return `${vfsBase()}/public/${encodePath(path)}`;
+}
+
+async function saveResponse(response, name) {
   if (!response.ok) throw new Error(`Download non riuscito (${response.status})`);
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement('a');
   link.href = url;
-  link.download = item.name;
+  link.download = name;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadFile(item) {
+  const token = await window.VfsAuth.getAccessToken();
+  const response = await fetch(window.VfsWidget.downloadUrl(item.path, true), { headers: { Authorization: `Bearer ${token}` } });
+  await saveResponse(response, item.name);
+}
+
+export async function downloadPublicFile(item) {
+  await saveResponse(await fetch(publicFileUrl(item.path)), item.name);
 }
 
 export async function loadFilePreview(item) {
@@ -63,6 +85,14 @@ export async function loadFilePreview(item) {
   const response = await fetch(window.VfsWidget.downloadUrl(item.path, false), {
     headers: { Authorization: `Bearer ${token}` },
   });
+  return parsePreviewResponse(response, item);
+}
+
+export async function loadPublicFilePreview(item) {
+  return parsePreviewResponse(await fetch(publicFileUrl(item.path)), item);
+}
+
+async function parsePreviewResponse(response, item) {
   if (!response.ok) throw new Error(`Anteprima non disponibile (${response.status})`);
 
   const blob = await response.blob();

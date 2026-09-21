@@ -122,6 +122,34 @@ body {
   background: #f5f7fa;
 }
 
+.breadcrumbs {
+  align-items: center;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.breadcrumbs button {
+  border-color: transparent;
+  background: transparent;
+  color: #285f9b;
+  white-space: nowrap;
+}
+
+.breadcrumbs button.active {
+  border-color: #a9bdd2;
+  background: #dceafb;
+  color: #174f8d;
+}
+
+.breadcrumb-part {
+  display: inline-flex;
+  align-items: center;
+}
+
+.breadcrumb-separator {
+  color: #8997a6;
+}
+
 button,
 a,
 .search-input,
@@ -183,6 +211,24 @@ a:hover {
 button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.glyph-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: "DejaVu Sans", "Noto Sans Symbols 2", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar .glyph-button {
+  width: 34px;
+  height: 30px;
 }
 
 .icon-btn {

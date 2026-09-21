@@ -3,11 +3,12 @@ import AuthPanel from './components/AuthPanel';
 import ExplorerLauncher from './components/ExplorerLauncher';
 import FileList from './components/FileList';
 import PreviewModal from './components/PreviewModal';
-import { createDirectory, deleteItem, downloadFile, getSession, initializeVfs, listDirectory, loadFilePreview, login, logout, renameItem, uploadFile } from './api';
+import { createDirectory, deleteItem, downloadFile, downloadPublicFile, getSession, initializeVfs, listDirectory, listPublicDirectory, loadFilePreview, loadPublicFilePreview, login, logout, renameItem, uploadFile } from './api';
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState(null);
+  const [volume, setVolume] = useState('public');
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -16,11 +17,12 @@ export default function App() {
   const [operationPath, setOperationPath] = useState('');
   const [error, setError] = useState('');
 
-  const refresh = useCallback(async (path = currentPath) => {
+  const refresh = useCallback(async (path = currentPath, targetVolume = volume) => {
     setLoading(true);
     setError('');
     try {
-      const listing = await listDirectory(path);
+      const listing = targetVolume === 'private' ? await listDirectory(path) : await listPublicDirectory(path);
+      setVolume(targetVolume);
       setCurrentPath(listing.path);
       setItems(listing.items);
     } catch (err) {
@@ -28,7 +30,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [currentPath]);
+  }, [currentPath, volume]);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +48,7 @@ export default function App() {
         if (!active) return;
         setSession(nextSession);
         setReady(true);
+        await refresh('', nextSession ? 'private' : 'public');
       })
       .catch((err) => {
         if (!active) return;
@@ -55,15 +58,19 @@ export default function App() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    if (session) refresh('');
-  }, [session]);
-
   async function handleLogout() {
     await logout();
     setSession(null);
-    setItems([]);
-    setCurrentPath('');
+    await refresh('', 'public');
+  }
+
+  function handleVolumeChange(nextVolume) {
+    if (nextVolume === 'private' && !session) {
+      login();
+      return;
+    }
+    closePreview();
+    refresh('', nextVolume);
   }
 
   async function handleUpload(files) {
@@ -96,7 +103,7 @@ export default function App() {
   async function handleDownload(item) {
     try {
       setError('');
-      await downloadFile(item);
+      await (volume === 'public' ? downloadPublicFile(item) : downloadFile(item));
     } catch (err) {
       setError(err.message || 'Download non riuscito');
     }
@@ -113,7 +120,7 @@ export default function App() {
     closePreview();
     setPreview({ item, loading: true, error: '', kind: '', text: '', url: '' });
     try {
-      const content = await loadFilePreview(item);
+      const content = await (volume === 'public' ? loadPublicFilePreview(item) : loadFilePreview(item));
       setPreview((current) => {
         if (current?.item.path === item.path) {
           return { item, loading: false, error: '', ...content };
@@ -175,14 +182,16 @@ export default function App() {
         <ExplorerLauncher ready={ready} />
       </header>
       <AuthPanel ready={ready} session={session} error={error} onLogin={login} onLogout={handleLogout} />
-      {session && (
+      {ready && (
         <FileList
+          volume={volume}
           currentPath={currentPath}
           items={items}
           loading={loading}
           uploading={uploading}
           operationPath={operationPath}
           error={error}
+          onVolumeChange={handleVolumeChange}
           onOpen={refresh}
           onRefresh={() => refresh(currentPath)}
           onUpload={handleUpload}
