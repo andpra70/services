@@ -60,7 +60,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
       const targetPath = path ? `${path}/${name}` : name;
       return onResolve({ volume, type: 'file', name, path: targetPath, exists: items.some((item) => item.name === name) });
     }
-    if (selected?.type === 'file') onResolve({ ...selected, url: volume === 'public' ? `/vfs/public/${selected.path}` : null });
+    if (selected?.type === 'file') onResolve(selected);
   };
 
   return <div className="vfs-overlay" onMouseDown={(event) => event.target === event.currentTarget && onResolve(null)}>
@@ -77,7 +77,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
       <div className="vfs-main">
         <aside><button className={!volume ? 'active' : ''} onClick={() => load(null, '')}>🖥 Computer</button>{volumes.private.available() && <button className={volume === 'private' ? 'active' : ''} onClick={() => load('private', '')}>🔒 Privato</button>}<button className={volume === 'public' ? 'active' : ''} onClick={() => load('public', '')}>🌐 Pubblico</button></aside>
         <main>
-          {!volume ? <div className="vfs-volumes">{volumes.private.available() && <button onDoubleClick={() => load('private', '')} onClick={() => setSelected({ volume: 'private' })}>🔒<strong>Privato</strong></button>}<button onDoubleClick={() => load('public', '')} onClick={() => setSelected({ volume: 'public' })}>🌐<strong>Pubblico</strong></button></div> : <table><thead><tr><th>Nome</th><th>Tipo</th><th>Dimensione</th><th>Modificato</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.path} className={selected?.path === item.path ? 'selected' : ''} onClick={() => setSelected(item)} onDoubleClick={() => item.type === 'directory' ? navigate(item) : options.mode === 'file' && onResolve({ ...item, url: volume === 'public' ? `/vfs/public/${item.path}` : null })}><td>{item.type === 'directory' ? '📁' : '📄'} {item.name}</td><td>{item.type === 'directory' ? 'Cartella' : 'File'}</td><td>{formatSize(item.size)}</td><td>{item.lastModified ? new Date(item.lastModified).toLocaleString() : '—'}</td></tr>)}</tbody></table>}
+          {!volume ? <div className="vfs-volumes">{volumes.private.available() && <button onClick={() => load('private', '')}>🔒<strong>Privato</strong></button>}<button onClick={() => load('public', '')}>🌐<strong>Pubblico</strong></button></div> : <table><thead><tr><th>Nome</th><th>Tipo</th><th>Dimensione</th><th>Modificato</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.path} className={selected?.path === item.path ? 'selected' : ''} onClick={() => setSelected(item)} onDoubleClick={() => item.type === 'directory' ? navigate(item) : options.mode === 'file' && onResolve(item)}><td>{item.type === 'directory' ? '📁' : '📄'} {item.name}</td><td>{item.type === 'directory' ? 'Cartella' : 'File'}</td><td>{formatSize(item.size)}</td><td>{item.lastModified ? new Date(item.lastModified).toLocaleString() : '—'}</td></tr>)}</tbody></table>}
           {loading && <p className="vfs-status">Caricamento…</p>}{error && <p className="vfs-error">{error}</p>}{volume && !loading && !error && !visibleItems.length && <p className="vfs-status">Directory vuota</p>}
         </main>
       </div>

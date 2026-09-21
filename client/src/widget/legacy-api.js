@@ -1,5 +1,6 @@
 export function createLegacyApi(globalObject, open) {
-  const base = "/vfs/api";
+  const vfsBase = String(globalObject.VFS_BASE_URL || "/vfs").replace(/\/+$/, "");
+  const base = `${vfsBase}/api`;
   async function call(path, options) {
     let token = await globalObject.VfsAuth.getAccessToken();
     const request = () => fetch(base + path, {

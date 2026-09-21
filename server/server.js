@@ -226,7 +226,7 @@ async function listPublicDirectory(rawPath, res, next) {
   } catch (error) { return next(error); }
 }
 
-app.get("/public/", (req, res, next) => listPublicDirectory("", res, next));
+app.get(["/public", "/public/"], (req, res, next) => listPublicDirectory("", res, next));
 app.get("/public/*", async (req, res, next) => {
   try {
     if (req.path.endsWith("/")) return listPublicDirectory(req.params[0], res, next);
