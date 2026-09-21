@@ -21,6 +21,7 @@ services:
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
       S3_BUCKET: ${S3_BUCKET:-public-assets}
+      S3_PUBLIC_BUCKET: ${S3_PUBLIC_BUCKET:-published-assets}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-vfsadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-vfs-change-me}
       JWT_ISSUER: ${JWT_ISSUER:-vfs-auth}
@@ -67,12 +68,15 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vfsadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-vfs-change-me}
       S3_BUCKET: ${S3_BUCKET:-public-assets}
+      S3_PUBLIC_BUCKET: ${S3_PUBLIC_BUCKET:-published-assets}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
         mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
         mc mb --ignore-existing "local/$$S3_BUCKET" &&
-        mc anonymous set download "local/$$S3_BUCKET"
+        mc mb --ignore-existing "local/$$S3_PUBLIC_BUCKET" &&
+        mc anonymous set none "local/$$S3_BUCKET" &&
+        mc anonymous set download "local/$$S3_PUBLIC_BUCKET"
 
 volumes:
   fileserver-redis:

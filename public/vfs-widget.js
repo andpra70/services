@@ -39,6 +39,8 @@
     rmfile: function (path) { return jsonCall("/file", "DELETE", { path: path }); },
     rmdir: function (path, options) { return jsonCall("/rmdir", "DELETE", { path: path, recursive: !!(options && options.recursive) }); },
     rename: function (sourcePath, targetPath, type) { return jsonCall("/rename", "POST", { sourcePath: sourcePath, targetPath: targetPath, type: type }); },
+    publish: function (sourcePath, publicPath) { return jsonCall("/publish", "POST", { sourcePath: sourcePath, publicPath: publicPath }); },
+    unpublish: function (publicPath) { return jsonCall("/public", "DELETE", { publicPath: publicPath }); },
     downloadUrl: function (path, force) { return base + "/download?path=" + encodeURIComponent(path) + (force ? "&download=true" : ""); },
     salvaFileTesto: function (path, content, mime) {
       var parts = path.split("/");

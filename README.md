@@ -16,6 +16,9 @@ isola gli oggetti MinIO tramite il claim utente `sub`.
 - `GET /api/download`;
 - `DELETE /api/file`;
 - `DELETE /api/rmdir`.
+- `POST /api/publish`, copia ricorsivamente una directory privata in un percorso pubblico;
+- `DELETE /api/public`, ritira una pubblicazione posseduta dall'utente;
+- `GET /public/*`, legge i file pubblicati senza autenticazione.
 
 Il front controller pubblica questi endpoint come `/fileserver/`,
 `/vfs/widget.js` e `/vfs/api/*`. Le applicazioni continuano quindi a caricare:
@@ -34,6 +37,7 @@ Il front controller pubblica questi endpoint come `/fileserver/`,
 | `S3_ENDPOINT` | Endpoint interno MinIO. |
 | `S3_REGION` | Regione S3. |
 | `S3_BUCKET` | Bucket degli oggetti. |
+| `S3_PUBLIC_BUCKET` | Bucket separato degli snapshot pubblici. |
 | `S3_ACCESS_KEY` | Utente MinIO. |
 | `S3_SECRET_KEY` | Password MinIO. |
 | `JWT_ISSUER` | Issuer atteso nei token. |

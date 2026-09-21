@@ -25,6 +25,7 @@ const required = (name) => {
 const cfg = {
   port: Number(process.env.PORT || 8080),
   bucket: process.env.S3_BUCKET || "public-assets",
+  publicBucket: process.env.S3_PUBLIC_BUCKET || "published-assets",
   issuer: process.env.JWT_ISSUER || "vfs-auth",
   audience: process.env.JWT_AUDIENCE || "vfs-clients",
   origins: (process.env.ALLOWED_ORIGINS || "").split(",").map((value) => value.trim()).filter(Boolean),
@@ -75,7 +76,40 @@ async function objectExists(key) {
     throw error;
   }
 }
-const copySource = (key) => `${cfg.bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+const copySource = (key, bucket = cfg.bucket) => `${bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+const publicOwnerKey = (value) => `${value}/`;
+
+async function listAllObjects(bucket, prefix) {
+  let token;
+  const objects = [];
+  do {
+    const output = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+    objects.push(...(output.Contents || []));
+    token = output.IsTruncated ? output.NextContinuationToken : undefined;
+  } while (token);
+  return objects;
+}
+
+async function deleteAllObjects(bucket, prefix) {
+  const objects = await listAllObjects(bucket, prefix);
+  for (let index = 0; index < objects.length; index += 1000) {
+    await s3.send(new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: { Objects: objects.slice(index, index + 1000).map(({ Key }) => ({ Key })), Quiet: true },
+    }));
+  }
+  return objects.length;
+}
+
+async function getPublicOwner(publicPath) {
+  try {
+    const result = await s3.send(new HeadObjectCommand({ Bucket: cfg.publicBucket, Key: publicOwnerKey(publicPath) }));
+    return result.Metadata?.owner || null;
+  } catch (error) {
+    if (error?.name === "NotFound" || error?.$metadata?.httpStatusCode === 404) return null;
+    throw error;
+  }
+}
 const authenticate = async (req, res, next) => {
   try {
     const token = req.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -99,6 +133,86 @@ app.use("/api", rateLimit({ windowMs: 60000, limit: 240 }));
 
 app.get("/healthz", (_req, res) => res.json({ status: "ok", service: "fileserver-vfs" }));
 app.get("/widget.js", (_req, res) => res.type("application/javascript").sendFile(widgetPath));
+
+app.post("/api/publish", authenticate, async (req, res, next) => {
+  try {
+    const sourcePath = cleanPath(req.body.sourcePath);
+    const publicPath = cleanPath(req.body.publicPath);
+    const currentOwner = await getPublicOwner(publicPath);
+    if (currentOwner && currentOwner !== req.auth.sub) return res.status(409).json({ error: "public_path_owned_by_another_user" });
+
+    const sourcePrefix = `${req.auth.sub}/${sourcePath}/`;
+    const sourceObjects = await listAllObjects(cfg.bucket, sourcePrefix);
+    if (!sourceObjects.length) return res.status(404).json({ error: "source_not_found_or_empty" });
+
+    const stagingPrefix = `_staging/${req.auth.sub}/${Date.now()}-${Math.random().toString(36).slice(2)}/`;
+    const staged = [];
+    try {
+      for (const entry of sourceObjects) {
+        const relativePath = entry.Key.slice(sourcePrefix.length);
+        if (!relativePath) continue;
+        const targetKey = `${stagingPrefix}${relativePath}`;
+        await s3.send(new CopyObjectCommand({
+          Bucket: cfg.publicBucket,
+          Key: targetKey,
+          CopySource: copySource(entry.Key),
+          MetadataDirective: "COPY",
+        }));
+        staged.push({ source: targetKey, relativePath });
+      }
+      if (!staged.length) return res.status(404).json({ error: "source_not_found_or_empty" });
+
+      await deleteAllObjects(cfg.publicBucket, `${publicPath}/`);
+      for (const entry of staged) {
+        await s3.send(new CopyObjectCommand({
+          Bucket: cfg.publicBucket,
+          Key: `${publicPath}/${entry.relativePath}`,
+          CopySource: copySource(entry.source, cfg.publicBucket),
+          MetadataDirective: "COPY",
+        }));
+      }
+      await s3.send(new PutObjectCommand({
+        Bucket: cfg.publicBucket,
+        Key: publicOwnerKey(publicPath),
+        Body: "",
+        ContentType: "application/x-directory",
+        Metadata: { owner: String(req.auth.sub) },
+      }));
+    } finally {
+      await deleteAllObjects(cfg.publicBucket, stagingPrefix).catch(() => {});
+    }
+
+    return res.json({ publicPath, url: `/vfs/public/${publicPath}/`, files: staged.length });
+  } catch (error) { return next(error); }
+});
+
+app.delete("/api/public", authenticate, async (req, res, next) => {
+  try {
+    const publicPath = cleanPath(req.body.publicPath);
+    const owner = await getPublicOwner(publicPath);
+    if (!owner) return res.status(404).json({ error: "publication_not_found" });
+    if (owner !== req.auth.sub) return res.status(403).json({ error: "publication_forbidden" });
+    const deleted = await deleteAllObjects(cfg.publicBucket, `${publicPath}/`);
+    return res.json({ publicPath, deleted });
+  } catch (error) { return next(error); }
+});
+
+app.get("/public/*", async (req, res, next) => {
+  try {
+    const objectPath = cleanPath(req.params[0]);
+    const range = req.get("range");
+    const output = await s3.send(new GetObjectCommand({ Bucket: cfg.publicBucket, Key: objectPath, Range: range || undefined }));
+    res.status(output.ContentRange ? 206 : 200);
+    if (output.ContentType) res.type(output.ContentType);
+    if (output.ContentLength != null) res.set("Content-Length", String(output.ContentLength));
+    if (output.ContentRange) res.set("Content-Range", output.ContentRange);
+    if (output.ETag) res.set("ETag", output.ETag);
+    res.set("Accept-Ranges", "bytes");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Cache-Control", /\.(?:json|html)$/i.test(objectPath) ? "public, max-age=60" : "public, max-age=31536000, immutable");
+    output.Body.pipe(res);
+  } catch (error) { return next(error); }
+});
 
 app.get("/api/list", authenticate, async (req, res, next) => {
   try {
