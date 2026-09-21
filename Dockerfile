@@ -7,6 +7,7 @@ RUN npm ci
 COPY client/package.json client/package-lock.json ./client/
 RUN npm --prefix client ci
 COPY client ./client
+COPY public ./public
 
 ARG VITE_APP_BASE=./
 ENV VITE_APP_BASE=${VITE_APP_BASE}
@@ -20,6 +21,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --chown=node:node server ./server
 COPY --chown=node:node public ./public
+COPY --from=build --chown=node:node /app/public/vfs-widget.js ./public/vfs-widget.js
 COPY --from=build --chown=node:node /app/client/dist ./client-dist
 
 USER node

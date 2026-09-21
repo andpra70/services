@@ -197,8 +197,40 @@ app.delete("/api/public", authenticate, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+async function listPublicDirectory(rawPath, res, next) {
+  try {
+    const directory = cleanPath(rawPath, { directory: true });
+    const prefix = directory ? `${directory}/` : "";
+    let token;
+    const contents = [];
+    const commonPrefixes = [];
+    do {
+      const output = await s3.send(new ListObjectsV2Command({
+        Bucket: cfg.publicBucket, Prefix: prefix, Delimiter: "/", ContinuationToken: token,
+      }));
+      contents.push(...(output.Contents || []));
+      commonPrefixes.push(...(output.CommonPrefixes || []));
+      token = output.IsTruncated ? output.NextContinuationToken : undefined;
+    } while (token);
+    const visible = (value) => value && !value.split("/").some((segment) => segment.startsWith("_"));
+    const directories = commonPrefixes.map((entry) => {
+      const itemPath = entry.Prefix.replace(/\/$/, "");
+      return { name: itemPath.split("/").pop(), path: itemPath, type: "directory" };
+    }).filter((entry) => visible(entry.path));
+    const files = contents.filter((entry) => entry.Key !== prefix && !entry.Key.endsWith("/") && visible(entry.Key)).map((entry) => ({
+      name: entry.Key.split("/").pop(), path: entry.Key, type: "file", size: entry.Size,
+      lastModified: entry.LastModified?.toISOString(), publicUrl: `/vfs/public/${entry.Key.split("/").map(encodeURIComponent).join("/")}`,
+    }));
+    res.set("Cache-Control", "public, max-age=30");
+    return res.json({ path: directory, items: [...directories, ...files] });
+  } catch (error) { return next(error); }
+}
+
+app.get("/public", (_req, res) => res.redirect(308, "/public/"));
+app.get("/public/", (req, res, next) => listPublicDirectory("", res, next));
 app.get("/public/*", async (req, res, next) => {
   try {
+    if (req.path.endsWith("/")) return listPublicDirectory(req.params[0], res, next);
     const objectPath = cleanPath(req.params[0]);
     const range = req.get("range");
     const output = await s3.send(new GetObjectCommand({ Bucket: cfg.publicBucket, Key: objectPath, Range: range || undefined }));

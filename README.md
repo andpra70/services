@@ -28,6 +28,23 @@ Il front controller pubblica questi endpoint come `/fileserver/`,
 /vfs/widget.js
 ```
 
+Il widget mantiene le API VFS2 esistenti e aggiunge un file explorer React
+incorporabile, isolato dagli stili della SPA tramite Shadow DOM:
+
+```js
+const file = await VfsWidget.open("private:catalogo-opere/images");
+const directory = await VfsWidget.open("public:galleria", { mode: "directory" });
+const target = await VfsWidget.open("minicms/sites", {
+  mode: "save",
+  suggestedName: "site.json",
+  accept: [".json"],
+});
+```
+
+`open()` senza percorso mostra la root virtuale con i volumi disponibili.
+Il volume privato compare quando esiste una sessione OAuth; quello pubblico è
+sempre consultabile e rimane in sola lettura. La chiusura restituisce `null`.
+
 ## Configurazione
 
 | Variabile | Significato |

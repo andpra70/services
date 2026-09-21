@@ -78,6 +78,23 @@ body {
   letter-spacing: 0.02em;
 }
 
+.explorer-launcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.explorer-launcher output {
+  max-width: min(44vw, 520px);
+  overflow: hidden;
+  color: #526678;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .window-controls {
   display: flex;
   gap: 7px;

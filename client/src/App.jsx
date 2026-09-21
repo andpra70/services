@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import AuthPanel from './components/AuthPanel';
+import ExplorerLauncher from './components/ExplorerLauncher';
 import FileList from './components/FileList';
 import PreviewModal from './components/PreviewModal';
 import { createDirectory, deleteItem, downloadFile, getSession, initializeVfs, listDirectory, loadFilePreview, login, logout, renameItem, uploadFile } from './api';
@@ -171,6 +172,7 @@ export default function App() {
       <header className="topbar">
         <div className="window-controls" aria-hidden><span /><span /><span /></div>
         <h1>Fileserver VFS2</h1>
+        <ExplorerLauncher ready={ready} />
       </header>
       <AuthPanel ready={ready} session={session} error={error} onLogin={login} onLogout={handleLogout} />
       {session && (
