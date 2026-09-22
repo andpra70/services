@@ -2,6 +2,14 @@ export function createLegacyApi(globalObject, open) {
   const vfsBase = String(globalObject.VFS_BASE_URL || "/vfs").replace(/\/+$/, "");
   const base = `${vfsBase}/api`;
   async function call(path, options) {
+    if (typeof globalObject.VfsAuth.authenticatedFetch === "function") {
+      const response = await globalObject.VfsAuth.authenticatedFetch(base + path, options);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || String(response.status));
+      }
+      return (response.headers.get("content-type") || "").includes("json") ? response.json() : response;
+    }
     let token = await globalObject.VfsAuth.getAccessToken();
     const request = () => fetch(base + path, {
       ...options,
