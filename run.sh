@@ -26,10 +26,9 @@ S3_REGION="${S3_REGION:-us-east-1}"
 S3_BUCKET="${S3_BUCKET:-public-assets}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-vfsadmin}"
 : "${S3_SECRET_KEY:?Set S3_SECRET_KEY in the environment or ENV_FILE}"
-JWT_ISSUER="${JWT_ISSUER:-vfs-auth}"
-JWT_AUDIENCE="${JWT_AUDIENCE:-vfs-clients}"
+OIDC_ISSUER="${OIDC_ISSUER:-http://oauth-server:9000/oauth-server}"
+OIDC_USERINFO_URL="${OIDC_USERINFO_URL:-${OIDC_ISSUER%/}/me}"
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://localhost}"
-PUBLIC_KEY_FILE="${PUBLIC_KEY_FILE:-${SCRIPT_DIR}/keys/public.pem}"
 
 if docker ps -a --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
   docker stop "${CONTAINER_NAME}" >/dev/null
@@ -50,11 +49,9 @@ docker run -d \
   -e S3_BUCKET="${S3_BUCKET}" \
   -e S3_ACCESS_KEY="${S3_ACCESS_KEY}" \
   -e S3_SECRET_KEY="${S3_SECRET_KEY}" \
-  -e JWT_ISSUER="${JWT_ISSUER}" \
-  -e JWT_AUDIENCE="${JWT_AUDIENCE}" \
+  -e OIDC_ISSUER="${OIDC_ISSUER}" \
+  -e OIDC_USERINFO_URL="${OIDC_USERINFO_URL}" \
   -e ALLOWED_ORIGINS="${ALLOWED_ORIGINS}" \
-  -e PUBLIC_KEY_PATH=/run/secrets/public.pem \
-  -v "${PUBLIC_KEY_FILE}:/run/secrets/public.pem:ro" \
   "${FULL_IMAGE}"
 
 printf 'Container: %s\n' "${CONTAINER_NAME}"

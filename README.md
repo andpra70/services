@@ -1,7 +1,7 @@
 # Fileserver VFS2
 
 Servizio unico per interfaccia React, widget VFS2 e API dei file su MinIO.
-Verifica i JWT RS256 emessi da `oauth-server`, usa Redis per revoche e cache e
+Verifica i bearer token tramite l'endpoint UserInfo di `oauth-server`, usa Redis per la cache e
 isola gli oggetti MinIO tramite il claim utente `sub`.
 
 ## Endpoint
@@ -24,7 +24,7 @@ Il front controller pubblica questi endpoint come `/fileserver/`,
 `/vfs/widget.js` e `/vfs/api/*`. Le applicazioni continuano quindi a caricare:
 
 ```text
-/auth/widget.js
+/auth/profile-widget.js
 /vfs/widget.js
 ```
 
@@ -60,21 +60,20 @@ Il drag-and-drop rimane disabilitato nel volume pubblico in sola lettura.
 | Variabile | Significato |
 | --- | --- |
 | `PORT` | Porta HTTP, predefinita `8080`. |
-| `REDIS_URL` | Redis condiviso per cache e revoche. |
+| `REDIS_URL` | Redis usato per la cache VFS. |
 | `S3_ENDPOINT` | Endpoint interno MinIO. |
 | `S3_REGION` | Regione S3. |
 | `S3_BUCKET` | Bucket degli oggetti. |
 | `S3_PUBLIC_BUCKET` | Bucket separato degli snapshot pubblici. |
 | `S3_ACCESS_KEY` | Utente MinIO. |
 | `S3_SECRET_KEY` | Password MinIO. |
-| `JWT_ISSUER` | Issuer atteso nei token. |
-| `JWT_AUDIENCE` | Audience attesa nei token. |
-| `PUBLIC_KEY_PATH` | Chiave pubblica RS256 montata in runtime. |
+| `OIDC_ISSUER` | Issuer del provider OIDC. |
+| `OIDC_USERINFO_URL` | Endpoint interno `/me` usato per validare i bearer token. |
 | `ALLOWED_ORIGINS` | Origin CORS separate da virgola. |
 | `MAX_UPLOAD_BYTES` | Dimensione massima di un upload. |
 
-La chiave `keys/public.pem` non è versionata e deve corrispondere alla chiave
-privata montata in `oauth-server`.
+I bearer token vengono verificati dal provider tramite UserInfo; il fileserver
+non gestisce chiavi o sessioni di autenticazione proprie.
 
 ## Docker
 
@@ -97,5 +96,5 @@ Impostare Redis, MinIO e relative credenziali, quindi:
 ```
 
 Il backend parte normalmente sulla porta `8080` e Vite sulla porta `5173`.
-Il login continua a essere fornito da `/auth/widget.js` tramite il front
+Il login è fornito da `/auth/profile-widget.js` tramite il front
 controller configurato con `VITE_FRONT_CONTROLLER_URL`.

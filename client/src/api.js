@@ -17,7 +17,7 @@ function loadScript(src, globalName) {
 }
 
 export function initializeVfs() {
-  if (!initialization) initialization = loadScript('/auth/widget.js', 'VfsAuth').then(() => loadScript('/vfs/widget.js', 'VfsWidget'));
+  if (!initialization) initialization = loadScript('/auth/profile-widget.js', 'VfsAuth').then(() => loadScript('/vfs/widget.js', 'VfsWidget'));
   return initialization;
 }
 

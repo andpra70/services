@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,7 +9,6 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import jwt from "jsonwebtoken";
 import multer from "multer";
 import { createClient } from "redis";
 
@@ -26,12 +24,10 @@ const cfg = {
   port: Number(process.env.PORT || 8080),
   bucket: process.env.S3_BUCKET || "public-assets",
   publicBucket: process.env.S3_PUBLIC_BUCKET || "published-assets",
-  issuer: process.env.JWT_ISSUER || "vfs-auth",
-  audience: process.env.JWT_AUDIENCE || "vfs-clients",
+  oidcUserinfoUrl: process.env.OIDC_USERINFO_URL || `${String(process.env.OIDC_ISSUER || process.env.OAUTH_ISSUER || "http://oauth-server:9000").replace(/\/+$/, "")}/me`,
   origins: (process.env.ALLOWED_ORIGINS || "").split(",").map((value) => value.trim()).filter(Boolean),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 104857600),
 };
-const publicKey = fs.readFileSync(process.env.PUBLIC_KEY_PATH || "/run/secrets/public.pem", "utf8");
 const s3 = new S3Client({
   region: process.env.S3_REGION || "us-east-1",
   endpoint: required("S3_ENDPOINT"),
@@ -114,11 +110,11 @@ const authenticate = async (req, res, next) => {
   try {
     const token = req.get("authorization")?.replace(/^Bearer\s+/i, "");
     if (!token) return res.status(401).json({ error: "missing_token" });
-    const decoded = jwt.verify(token, publicKey, { algorithms: ["RS256"], issuer: cfg.issuer, audience: cfg.audience });
-    if (await redis.exists(`auth:revoked:sid:${decoded.sid}`) || await redis.exists(`auth:revoked:jti:${decoded.jti}`)) {
-      return res.status(401).json({ error: "session_revoked" });
-    }
-    req.auth = decoded;
+    const response = await fetch(cfg.oidcUserinfoUrl, { headers: { authorization: `Bearer ${token}` } });
+    if (!response.ok) return res.status(401).json({ error: "invalid_token" });
+    const profile = await response.json();
+    if (!profile?.sub) return res.status(401).json({ error: "invalid_token" });
+    req.auth = profile;
     return next();
   } catch {
     return res.status(401).json({ error: "invalid_token" });
