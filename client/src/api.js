@@ -48,6 +48,16 @@ export function renameItem(item, requestedName, volume = 'private') {
   return apiFor(volume).rename(item.path, targetPath, item.type);
 }
 
+export function moveItem(item, targetDirectory, volume = 'private') {
+  const directory = String(targetDirectory || '').replace(/^\/+|\/+$/g, '');
+  const targetPath = directory ? `${directory}/${item.name}` : item.name;
+  if (targetPath === item.path) return Promise.resolve({ unchanged: true });
+  if (item.type === 'directory' && (directory === item.path || directory.startsWith(`${item.path}/`))) {
+    return Promise.reject(new Error('Non puoi spostare una cartella dentro sé stessa.'));
+  }
+  return apiFor(volume).rename(item.path, targetPath, item.type);
+}
+
 export async function listDirectory(path = '') {
   return normalizeVfsListing(await window.VfsWidget.list(path));
 }

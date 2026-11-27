@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ContextMenu from '../ContextMenu';
 import BreadcrumbStats from '../BreadcrumbStats';
 import PreviewModal from '../PreviewModal';
+import ImageThumbnail from '../ImageThumbnail';
 import { parsePreviewResponse } from '../../preview.js';
-import { isTextPreviewEntry } from '../../models.js';
+import { isImagePreviewEntry, isTextPreviewEntry } from '../../models.js';
 
 const parentPath = (path) => String(path || '').split('/').filter(Boolean).slice(0, -1).join('/');
 const formatSize = (bytes) => !bytes ? '—' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
@@ -21,6 +22,9 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
   const [error, setError] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dropTarget, setDropTarget] = useState('');
+  const [view, setView] = useState('list');
   const [history, setHistory] = useState(initialVolume ? [{ volume: initialVolume, path: initialPath }] : []);
   const [historyIndex, setHistoryIndex] = useState(initialVolume ? 0 : -1);
   const [saveName, setSaveName] = useState(options.suggestedName || '');
@@ -91,22 +95,28 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
   const handleDragEnter = (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (draggedItem) return;
     if (canUpload && event.dataTransfer?.types?.includes('Files')) setDragDepth((depth) => depth + 1);
   };
   const handleDragLeave = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    setDragDepth((depth) => Math.max(0, depth - 1));
+    if (!draggedItem) setDragDepth((depth) => Math.max(0, depth - 1));
   };
   const handleDragOver = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = canUpload ? 'copy' : 'none';
+    if (event.dataTransfer) event.dataTransfer.dropEffect = draggedItem ? 'move' : canUpload ? 'copy' : 'none';
   };
   const handleDrop = async (event) => {
     event.preventDefault();
     event.stopPropagation();
     setDragDepth(0);
+    if (draggedItem) {
+      const item = draggedItem; setDraggedItem(null); setDropTarget('');
+      await moveItem(item, path);
+      return;
+    }
     const files = Array.from(event.dataTransfer?.files || []);
     if (!canUpload || !files.length) return;
     setUploading(true); setError('');
@@ -118,6 +128,31 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
     } finally {
       setUploading(false);
     }
+  };
+  const moveItem = async (item, targetDirectory) => {
+    const targetPath = targetDirectory ? `${targetDirectory}/${item.name}` : item.name;
+    if (targetPath === item.path) return;
+    if (item.type === 'directory' && (targetDirectory === item.path || targetDirectory.startsWith(`${item.path}/`))) {
+      setError('Non puoi spostare una cartella dentro sé stessa.'); return;
+    }
+    try {
+      setError('');
+      await volumes[volume].rename(item.path, targetPath, item.type);
+      await load(volume, path, false);
+    } catch (reason) { setError(reason?.message === 'target_exists' ? 'Nella destinazione esiste già un elemento con questo nome.' : reason?.message || 'Spostamento non riuscito'); }
+  };
+  const startItemDrag = (event, item) => {
+    setDraggedItem(item);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-vfs-item', item.path);
+    event.dataTransfer.setData('text/plain', item.name);
+  };
+  const dropOnDirectory = async (event, directory) => {
+    if (!draggedItem) return;
+    event.preventDefault(); event.stopPropagation();
+    const item = draggedItem;
+    setDraggedItem(null); setDropTarget('');
+    await moveItem(item, directory.path);
   };
   const chooseFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -176,6 +211,10 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
     await load(volume, path, false);
     setPreview((current) => current ? { ...current, text, editable: true } : current);
   };
+  const loadThumbnail = async (item) => {
+    const signal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(120000) : undefined;
+    return parsePreviewResponse(await volumes[volume].fetch(item.path, { signal }), item);
+  };
   const openContextMenu = (event, item = null) => {
     event.preventDefault();
     event.stopPropagation();
@@ -214,20 +253,24 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
         <div className="vfs-crumbs">{volume ? <><button onClick={() => load(null, '')}>Computer</button><span>/</span><button onClick={() => load(volume, '')}>{volume === 'private' ? 'Privato' : volume === 'local' ? 'Locale' : 'Pubblico'}</button>{path.split('/').filter(Boolean).map((part, index, all) => <span key={`${part}-${index}`}> / <button onClick={() => load(volume, all.slice(0, index + 1).join('/'))}>{part}</button></span>)}</> : <strong>Computer</strong>}</div>
         {volume && <BreadcrumbStats volume={volume} path={path} items={items} />}
         <input type="search" placeholder="Cerca" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <span className="view-switch" aria-label="Tipo di vista"><button className={view === 'list' ? 'active' : ''} title="Vista elenco" aria-label="Vista elenco" onClick={() => setView('list')}>☷</button><button className={view === 'grid' ? 'active' : ''} title="Vista griglia" aria-label="Vista griglia" onClick={() => setView('grid')}>▦</button></span>
       </div>
       <div className={`vfs-main${dragDepth > 0 ? ' drag-active' : ''}`} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
         <aside><button className={!volume ? 'active' : ''} onClick={() => load(null, '')}>🖥 Computer</button>{volumes.local?.available() && <button className={volume === 'local' ? 'active' : ''} onClick={() => load('local', '')}>💾 Locale</button>}{volumes.private.available() && <button className={volume === 'private' ? 'active' : ''} onClick={() => load('private', '')}>🔒 Privato</button>}<button className={volume === 'public' ? 'active' : ''} onClick={() => load('public', '')}>🌐 Pubblico</button></aside>
         <main onContextMenu={(event) => openContextMenu(event)}>
           {dragDepth > 0 && canUpload && <div className="vfs-drop-hint">Rilascia qui per caricare in {path ? `/${path}` : '/'} </div>}
-          {!volume ? <div className="vfs-volumes">{volumes.local?.available() && <button onClick={() => load('local', '')}>💾<strong>Locale</strong></button>}{volumes.private.available() && <button onClick={() => load('private', '')}>🔒<strong>Privato</strong></button>}<button onClick={() => load('public', '')}>🌐<strong>Pubblico</strong></button></div> : <table>
+          {!volume ? <div className="vfs-volumes">{volumes.local?.available() && <button onClick={() => load('local', '')}>💾<strong>Locale</strong></button>}{volumes.private.available() && <button onClick={() => load('private', '')}>🔒<strong>Privato</strong></button>}<button onClick={() => load('public', '')}>🌐<strong>Pubblico</strong></button></div> : view === 'list' ? <table>
             <thead><tr><th><SortHeader field="name">Nome</SortHeader></th><th>Tipo</th><th><SortHeader field="size">Dimensione</SortHeader></th><th><SortHeader field="lastModified">Modificato</SortHeader></th><th>Azioni</th></tr></thead>
-            <tbody>{visibleItems.map((item) => <tr key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={`${selected === item ? 'selected ' : ''}${item.virtual ? 'virtual-entry' : ''}`.trim()} onClick={() => setSelected(item)} onContextMenu={(event) => { setSelected(item); openContextMenu(event, item); }} onDoubleClick={() => item.type === 'directory' ? navigate(item) : options.mode === 'file' && onResolve(item)}>
+            <tbody>{visibleItems.map((item) => <tr key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={`${selected === item ? 'selected ' : ''}${item.virtual ? 'virtual-entry ' : ''}${dropTarget === item.path ? 'drop-target' : ''}`.trim()} draggable={!item.virtual && Boolean(volumes[volume]?.writable)} onDragStart={(event) => startItemDrag(event, item)} onDragEnd={() => { setDraggedItem(null); setDropTarget(''); }} onDragOver={(event) => { if (draggedItem && item.type === 'directory') { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setDropTarget(item.path); } }} onDragLeave={() => dropTarget === item.path && setDropTarget('')} onDrop={(event) => item.type === 'directory' && dropOnDirectory(event, item)} onClick={() => setSelected(item)} onContextMenu={(event) => { setSelected(item); openContextMenu(event, item); }} onDoubleClick={() => item.type === 'directory' ? navigate(item) : options.mode === 'file' && onResolve(item)}>
               <td>{item.type === 'directory' ? '📁' : '📄'} {item.name}</td>
               <td>{item.virtual ? 'Cartella virtuale' : item.type === 'directory' ? 'Cartella' : 'File'}</td>
               <td>{formatSize(item.size)}</td><td>{item.lastModified ? new Date(item.lastModified).toLocaleString() : '—'}</td>
               <td><span className="vfs-actions">{item.type === 'directory' ? <button title={item.virtualKind === 'parent' ? 'Directory superiore' : item.virtualKind === 'current' ? 'Directory corrente' : 'Apri'} aria-label={`Apri ${item.name}`} onClick={(event) => { event.stopPropagation(); navigate(item); }}>↳</button> : <><button title="Scarica" aria-label={`Scarica ${item.name}`} onClick={(event) => { event.stopPropagation(); downloadItem(item); }}>⇩</button>{volumes[volume]?.writable && isTextPreviewEntry(item) && <button title="Modifica" aria-label={`Modifica ${item.name}`} onClick={(event) => { event.stopPropagation(); previewItem(item, true); }}>{'{}'}</button>}</>}{volumes[volume]?.writable && !item.virtual && <><button title="Rinomina" aria-label={`Rinomina ${item.name}`} onClick={(event) => { event.stopPropagation(); renameItem(item); }}>✎</button><button className="danger" title="Elimina" aria-label={`Elimina ${item.name}`} onClick={(event) => { event.stopPropagation(); removeItem(item); }}>×</button></>}</span></td>
             </tr>)}</tbody>
-          </table>}
+          </table> : <div className="file-grid">{visibleItems.map((item) => <article key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={`file-grid-item${selected === item ? ' selected' : ''}${item.virtual ? ' virtual-entry' : ''}${dropTarget === item.path ? ' drop-target' : ''}`} draggable={!item.virtual && Boolean(volumes[volume]?.writable)} onDragStart={(event) => startItemDrag(event, item)} onDragEnd={() => { setDraggedItem(null); setDropTarget(''); }} onDragOver={(event) => { if (draggedItem && item.type === 'directory') { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setDropTarget(item.path); } }} onDragLeave={() => dropTarget === item.path && setDropTarget('')} onDrop={(event) => item.type === 'directory' && dropOnDirectory(event, item)} onClick={() => setSelected(item)} onContextMenu={(event) => { setSelected(item); openContextMenu(event, item); }} onDoubleClick={() => item.type === 'directory' ? navigate(item) : options.mode === 'file' && onResolve(item)}>
+            <div className="file-grid-preview">{item.type === 'directory' ? <span aria-hidden>📁</span> : isImagePreviewEntry(item) ? <ImageThumbnail item={item} load={loadThumbnail} cacheKey={`${volume}:${item.lastModified || 0}`} /> : <span className="grid-file-icon" aria-hidden>📄</span>}</div>
+            <strong title={item.name}>{item.name}</strong><small>{item.virtual ? 'Directory superiore' : item.type === 'directory' ? 'Cartella' : formatSize(item.size)}</small>
+          </article>)}</div>}
           {(loading || uploading) && <p className="vfs-status">{uploading ? 'Caricamento file…' : 'Caricamento…'}</p>}{error && <p className="vfs-error">{error}</p>}{volume && !loading && !uploading && !error && visibleItems.every((item) => item.virtual) && <p className="vfs-status">Directory vuota</p>}
           <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
         </main>

@@ -156,6 +156,8 @@ body {
 .breadcrumb-stats:hover .breadcrumb-stats-tooltip, .breadcrumb-stats:focus .breadcrumb-stats-tooltip { opacity: 1; transform: translateY(0); }
 .sort-header { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; border: 0; background: transparent; font-weight: 700; text-align: left; }.sort-header:hover { border: 0; background: transparent; color: #174f8d; }.sort-header span { color: #718297; font-size: .65rem; }
 .virtual-entry { color: #526678; font-weight: 600; background: #fafbfd; }
+tr[draggable="true"] { cursor: grab; } tr[draggable="true"]:active { cursor: grabbing; }
+tr.drop-target td { background: #dcecff; box-shadow: inset 0 2px #4c86bd, inset 0 -2px #4c86bd; }
 
 button,
 a,
@@ -237,6 +239,8 @@ button:disabled {
   width: 34px;
   height: 30px;
 }
+.view-switch { display: inline-flex; margin-left: 2px; border: 1px solid #c4ceda; border-radius: 7px; overflow: hidden; }.view-switch button { width: 32px; height: 28px; padding: 0; border: 0; border-radius: 0; font-size: 1rem; }.view-switch button.active { background: #dceafb; color: #174f8d; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(135px,1fr)); gap: 12px; padding: 14px; align-content: start; }.file-grid-item { min-width: 0; padding: 9px; border: 1px solid #d4dde7; border-radius: 9px; background: #fff; text-align: center; user-select: none; }.file-grid-item:hover { border-color: #9fb5ca; background: #f5f9fd; }.file-grid-item[draggable="true"] { cursor: grab; }.file-grid-item.drop-target { border-color: #397bb8; background: #dcecff; box-shadow: 0 0 0 2px #77a8d5; }.file-grid-preview { height: 96px; display: grid; place-items: center; margin-bottom: 7px; overflow: hidden; border-radius: 6px; background: #f1f4f8; }.file-grid-preview img { width: 100%; height: 100%; object-fit: cover; }.file-grid-preview>span { font-size: 42px; }.file-grid-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }.file-grid-item small { display: block; margin-top: 4px; color: #68798a; font-size: .7rem; }
 
 .icon-btn {
   width: 28px;

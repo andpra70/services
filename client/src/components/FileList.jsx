@@ -1,15 +1,19 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { formatFileSize, isTextPreviewEntry, parentDirectory } from '../models';
+import { formatFileSize, isImagePreviewEntry, isTextPreviewEntry, parentDirectory } from '../models';
 import GlyphButton from './GlyphButton';
 import VolumeBreadcrumbs from './VolumeBreadcrumbs';
 import ContextMenu from './ContextMenu';
+import ImageThumbnail from './ImageThumbnail';
 
-export default function FileList({ volume, currentPath, items, loading, uploading, operationPath, error, onVolumeChange, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onEdit, onDelete, onRename }) {
+export default function FileList({ volume, currentPath, items, loading, uploading, operationPath, error, onVolumeChange, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onLoadThumbnail, onEdit, onMove, onDelete, onRename }) {
   const picker = useRef(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: 'name', direction: 'asc' });
   const [dragDepth, setDragDepth] = useState(0);
   const [contextMenu, setContextMenu] = useState(null);
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dropTarget, setDropTarget] = useState('');
+  const [view, setView] = useState('list');
   const dragActive = dragDepth > 0;
   const readOnly = volume === 'public';
   const visibleItems = useMemo(() => {
@@ -45,24 +49,46 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
 
   function handleDragEnter(event) {
     event.preventDefault();
+    if (draggedItem) return;
     if (!readOnly && event.dataTransfer?.types?.includes('Files')) setDragDepth((depth) => depth + 1);
   }
 
   function handleDragLeave(event) {
     event.preventDefault();
-    setDragDepth((depth) => Math.max(0, depth - 1));
+    if (!draggedItem) setDragDepth((depth) => Math.max(0, depth - 1));
   }
 
   function handleDragOver(event) {
     event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    if (event.dataTransfer) event.dataTransfer.dropEffect = draggedItem ? 'move' : 'copy';
   }
 
   async function handleDrop(event) {
     event.preventDefault();
     setDragDepth(0);
+    if (draggedItem) {
+      setDropTarget('');
+      const item = draggedItem; setDraggedItem(null);
+      await onMove(item, currentPath);
+      return;
+    }
     const files = event.dataTransfer?.files;
     if (!readOnly && files?.length) await onUpload(files);
+  }
+
+  function startItemDrag(event, item) {
+    setDraggedItem(item);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-vfs-item', item.path);
+    event.dataTransfer.setData('text/plain', item.name);
+  }
+
+  async function dropOnDirectory(event, directory) {
+    if (!draggedItem) return;
+    event.preventDefault(); event.stopPropagation();
+    const item = draggedItem;
+    setDraggedItem(null); setDropTarget('');
+    await onMove(item, directory.path);
   }
 
   async function createDirectory() {
@@ -98,6 +124,10 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
         {!readOnly && <GlyphButton glyph={uploading ? '…' : '⇧'} label={uploading ? 'Caricamento in corso' : 'Carica file'} onClick={() => picker.current?.click()} disabled={uploading} />}
         <input ref={picker} type="file" multiple hidden onChange={chooseFile} />
         <input className="search-input" type="search" placeholder="Filtra la lista" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <span className="view-switch" aria-label="Tipo di vista">
+          <button type="button" className={view === 'list' ? 'active' : ''} title="Vista elenco" aria-label="Vista elenco" onClick={() => setView('list')}>☷</button>
+          <button type="button" className={view === 'grid' ? 'active' : ''} title="Vista griglia" aria-label="Vista griglia" onClick={() => setView('grid')}>▦</button>
+        </span>
       </section>
       <VolumeBreadcrumbs volume={volume} path={currentPath} items={items} disabled={loading} onVolumeChange={onVolumeChange} onOpen={onOpen} />
       {error && <p className="error">{error}</p>}
@@ -112,11 +142,11 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
         <div className="drop-hint" aria-hidden={!dragActive}>
           Rilascia i file in /{currentPath || ''}
         </div>
-        <table>
+        {view === 'list' ? <table>
           <thead><tr><th><SortHeader field="name">Nome</SortHeader></th><th>Tipo</th><th><SortHeader field="size">Dimensione</SortHeader></th><th><SortHeader field="lastModified">Modificato</SortHeader></th><th>Azioni</th></tr></thead>
           <tbody>
             {visibleItems.map((item) => (
-              <tr key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={item.virtual ? 'virtual-entry' : ''} onContextMenu={(event) => openContextMenu(event, item)}>
+              <tr key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={`${item.virtual ? 'virtual-entry ' : ''}${dropTarget === item.path ? 'drop-target' : ''}`.trim()} draggable={!item.virtual && !readOnly} onDragStart={(event) => startItemDrag(event, item)} onDragEnd={() => { setDraggedItem(null); setDropTarget(''); }} onDragOver={(event) => { if (draggedItem && item.type === 'directory') { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setDropTarget(item.path); } }} onDragLeave={() => dropTarget === item.path && setDropTarget('')} onDrop={(event) => item.type === 'directory' && dropOnDirectory(event, item)} onContextMenu={(event) => openContextMenu(event, item)}>
                 <td>
                   <button
                     type="button"
@@ -146,7 +176,11 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
               </tr>
             ))}
           </tbody>
-        </table>
+        </table> : <div className="file-grid">{visibleItems.map((item) => <article key={item.virtual ? `virtual-${item.virtualKind}` : item.path} className={`file-grid-item${item.virtual ? ' virtual-entry' : ''}${dropTarget === item.path ? ' drop-target' : ''}`} draggable={!item.virtual && !readOnly} onDragStart={(event) => startItemDrag(event, item)} onDragEnd={() => { setDraggedItem(null); setDropTarget(''); }} onDragOver={(event) => { if (draggedItem && item.type === 'directory') { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setDropTarget(item.path); } }} onDragLeave={() => dropTarget === item.path && setDropTarget('')} onDrop={(event) => item.type === 'directory' && dropOnDirectory(event, item)} onContextMenu={(event) => openContextMenu(event, item)} onDoubleClick={() => item.type === 'directory' ? onOpen(item.path) : onPreview(item)}>
+          <div className="file-grid-preview">{item.type === 'directory' ? <span aria-hidden>📁</span> : isImagePreviewEntry(item) ? <ImageThumbnail item={item} load={onLoadThumbnail} cacheKey={`${volume}:${item.lastModified || 0}`} /> : <span className="grid-file-icon" aria-hidden>📄</span>}</div>
+          <strong title={item.name}>{item.name}</strong>
+          <small>{item.virtual ? 'Directory superiore' : item.type === 'directory' ? 'Cartella' : formatFileSize(item.size)}</small>
+        </article>)}</div>}
         {loading && <p className="loading">Caricamento lista da VFS2…</p>}
         {!loading && visibleItems.every((item) => item.virtual) && <p className="empty-list">Nessun file presente in questa directory.</p>}
         <ContextMenu menu={contextMenu} onClose={closeContextMenu} />

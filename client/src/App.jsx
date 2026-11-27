@@ -3,7 +3,7 @@ import AuthPanel from './components/AuthPanel';
 import ExplorerLauncher from './components/ExplorerLauncher';
 import FileList from './components/FileList';
 import PreviewModal from './components/PreviewModal';
-import { createDirectory, deleteItem, downloadFile, downloadLocalFile, downloadPublicFile, getSession, initializeVfs, listDirectory, listLocalDirectory, listPublicDirectory, loadFilePreview, loadLocalFilePreview, loadPublicFilePreview, login, logout, renameItem, uploadFile } from './api';
+import { createDirectory, deleteItem, downloadFile, downloadLocalFile, downloadPublicFile, getSession, initializeVfs, listDirectory, listLocalDirectory, listPublicDirectory, loadFilePreview, loadLocalFilePreview, loadPublicFilePreview, login, logout, moveItem, renameItem, uploadFile } from './api';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -122,6 +122,10 @@ export default function App() {
     return openPreview(item, false);
   }
 
+  const loadThumbnail = (item) => volume === 'public'
+    ? loadPublicFilePreview(item)
+    : volume === 'local' ? loadLocalFilePreview(item) : loadFilePreview(item);
+
   async function handleEdit(item) {
     return openPreview(item, true);
   }
@@ -192,6 +196,19 @@ export default function App() {
     }
   }
 
+  async function handleMove(item, targetDirectory) {
+    try {
+      setError('');
+      setOperationPath(item.path);
+      await moveItem(item, targetDirectory, volume);
+      await refresh(currentPath, volume);
+    } catch (err) {
+      setError(err.message === 'target_exists' ? 'Nella destinazione esiste già un elemento con questo nome.' : err.message || 'Spostamento non riuscito');
+    } finally {
+      setOperationPath('');
+    }
+  }
+
   return (
     <div className="desktop">
       <header className="topbar">
@@ -216,7 +233,9 @@ export default function App() {
           onCreateDirectory={handleCreateDirectory}
           onDownload={handleDownload}
           onPreview={handlePreview}
+          onLoadThumbnail={loadThumbnail}
           onEdit={handleEdit}
+          onMove={handleMove}
           onDelete={handleDelete}
           onRename={handleRename}
         />

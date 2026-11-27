@@ -66,3 +66,7 @@ export function isTextPreviewEntry(entry) {
   const extension = fileExtension(entry?.name);
   return extension === 'json' || TEXT_EXTENSIONS.has(extension);
 }
+
+export function isImagePreviewEntry(entry) {
+  return IMAGE_EXTENSIONS.has(fileExtension(entry?.name));
+}
