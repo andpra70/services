@@ -3,12 +3,12 @@ import AuthPanel from './components/AuthPanel';
 import ExplorerLauncher from './components/ExplorerLauncher';
 import FileList from './components/FileList';
 import PreviewModal from './components/PreviewModal';
-import { createDirectory, deleteItem, downloadFile, downloadPublicFile, getSession, initializeVfs, listDirectory, listPublicDirectory, loadFilePreview, loadPublicFilePreview, login, logout, renameItem, uploadFile } from './api';
+import { createDirectory, deleteItem, downloadFile, downloadLocalFile, downloadPublicFile, getSession, initializeVfs, listDirectory, listLocalDirectory, listPublicDirectory, loadFilePreview, loadLocalFilePreview, loadPublicFilePreview, login, logout, renameItem, uploadFile } from './api';
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState(null);
-  const [volume, setVolume] = useState('public');
+  const [volume, setVolume] = useState('local');
   const [currentPath, setCurrentPath] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -21,7 +21,9 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const listing = targetVolume === 'private' ? await listDirectory(path) : await listPublicDirectory(path);
+      const listing = targetVolume === 'private'
+        ? await listDirectory(path)
+        : targetVolume === 'local' ? await listLocalDirectory(path) : await listPublicDirectory(path);
       setVolume(targetVolume);
       setCurrentPath(listing.path);
       setItems(listing.items);
@@ -35,9 +37,9 @@ export default function App() {
   useEffect(() => {
     let active = true;
     initializeVfs()
-      .then(async () => {
+      .then(async (capabilities) => {
         let nextSession = getSession();
-        if (!nextSession) {
+        if (!nextSession && window.VfsAuth) {
           try {
             await window.VfsAuth.getAccessToken();
             nextSession = getSession();
@@ -48,7 +50,7 @@ export default function App() {
         if (!active) return;
         setSession(nextSession);
         setReady(true);
-        await refresh('', nextSession ? 'private' : 'public');
+        await refresh('', nextSession ? 'private' : capabilities.localAvailable ? 'local' : 'public');
       })
       .catch((err) => {
         if (!active) return;
@@ -80,7 +82,7 @@ export default function App() {
       setError('');
       setUploading(true);
       for (const file of pendingFiles) {
-        await uploadFile(currentPath, file);
+        await uploadFile(currentPath, file, volume);
       }
       await refresh(currentPath);
     } catch (err) {
@@ -93,7 +95,7 @@ export default function App() {
   async function handleCreateDirectory(name) {
     try {
       setError('');
-      await createDirectory(currentPath ? `${currentPath}/${name}` : name);
+      await createDirectory(currentPath ? `${currentPath}/${name}` : name, volume);
       await refresh(currentPath);
     } catch (err) {
       setError(err.message || 'Creazione cartella non riuscita');
@@ -103,7 +105,7 @@ export default function App() {
   async function handleDownload(item) {
     try {
       setError('');
-      await (volume === 'public' ? downloadPublicFile(item) : downloadFile(item));
+      await (volume === 'public' ? downloadPublicFile(item) : volume === 'local' ? downloadLocalFile(item) : downloadFile(item));
     } catch (err) {
       setError(err.message || 'Download non riuscito');
     }
@@ -120,7 +122,7 @@ export default function App() {
     closePreview();
     setPreview({ item, loading: true, error: '', kind: '', text: '', url: '' });
     try {
-      const content = await (volume === 'public' ? loadPublicFilePreview(item) : loadFilePreview(item));
+      const content = await (volume === 'public' ? loadPublicFilePreview(item) : volume === 'local' ? loadLocalFilePreview(item) : loadFilePreview(item));
       setPreview((current) => {
         if (current?.item.path === item.path) {
           return { item, loading: false, error: '', ...content };
@@ -145,7 +147,7 @@ export default function App() {
       setError('');
       setOperationPath(item.path);
       if (preview?.item.path === item.path) closePreview();
-      await deleteItem(item);
+      await deleteItem(item, volume);
       await refresh(currentPath);
     } catch (err) {
       setError(err.message || 'Eliminazione non riuscita');
@@ -162,7 +164,7 @@ export default function App() {
       setError('');
       setOperationPath(item.path);
       if (preview?.item.path === item.path) closePreview();
-      await renameItem(item, requestedName);
+      await renameItem(item, requestedName, volume);
       await refresh(currentPath);
     } catch (err) {
       const message = err.message === 'target_exists'

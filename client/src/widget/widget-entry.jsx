@@ -4,17 +4,19 @@ import FileExplorerModal from '../components/explorer/FileExplorerModal';
 import { createVolumes } from '../explorer/volumes';
 import styles from './widget.css?inline';
 import { createLegacyApi } from './legacy-api';
+import { createLocalVfs } from '../vfs/local-vfs';
 
 const globalObject = window;
 let activePromise = null;
 let api;
+const localVfs = createLocalVfs(globalObject);
 
 const locationStorageKey = globalObject.VFS_EXPLORER_STORAGE_KEY || 'vfs.explorer.location.v1';
 
 function readStoredLocation() {
   try {
     const value = JSON.parse(globalObject.localStorage.getItem(locationStorageKey) || 'null');
-    if (!value || !['private', 'public'].includes(value.volume)) return null;
+    if (!value || !['private', 'public', 'local'].includes(value.volume)) return null;
     return { volume: value.volume, path: String(value.path || '').replace(/^\/+|\/+$/g, '') };
   } catch {
     return null;
@@ -37,7 +39,7 @@ function parseOpenArguments(path, rawOptions) {
   if (Array.isArray(path)) path = path[0];
   let normalizedPath = typeof path === 'string' ? path.trim() : '';
   let volume = options.volume || null;
-  const match = normalizedPath.match(/^(private|public):(.*)$/i);
+  const match = normalizedPath.match(/^(private|public|local):(.*)$/i);
   if (match) { volume = match[1].toLowerCase(); normalizedPath = match[2]; }
   normalizedPath = normalizedPath.replace(/^\/+|\/+$/g, '');
   if (!hasExplicitLocation) {
@@ -45,7 +47,7 @@ function parseOpenArguments(path, rawOptions) {
     if (stored) ({ volume, path: normalizedPath } = stored);
   }
   if (!volume && normalizedPath) volume = globalObject.VfsAuth?.getSession?.() ? 'private' : 'public';
-  if (options.mode === 'save') volume = 'private';
+  if (options.mode === 'save' && !volume) volume = 'private';
   if (volume === 'private' && !globalObject.VfsAuth?.getSession?.()) {
     volume = null;
     normalizedPath = '';
@@ -69,10 +71,11 @@ function open(path, options) {
     const finish = (result) => {
       root.unmount(); host.remove(); activePromise = null; resolve(result);
     };
-    root.render(<FileExplorerModal initialPath={initial.path} initialVolume={initial.volume} options={initial.options} volumes={createVolumes(globalObject, () => api)} onLocationChange={storeLocation} onResolve={finish} />);
+    root.render(<FileExplorerModal initialPath={initial.path} initialVolume={initial.volume} options={initial.options} volumes={createVolumes(globalObject, () => api, localVfs)} onLocationChange={storeLocation} onResolve={finish} />);
   });
   return activePromise;
 }
 
-api = createLegacyApi(globalObject, open);
+api = Object.freeze({ ...createLegacyApi(globalObject, open), localVfs });
 globalObject.VfsWidget = api;
+globalObject.localVfs = localVfs;

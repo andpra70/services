@@ -41,6 +41,27 @@ const target = await VfsWidget.open("minicms/sites", {
 });
 ```
 
+Il volume `local:` salva invece i dati nel browser tramite OPFS (Origin Private
+File System) e non richiede autenticazione. È disponibile da `localhost` o da
+un'origine HTTPS:
+
+```js
+await VfsWidget.localVfs.mkdir("bozze");
+await VfsWidget.localVfs.salvaFileTesto("bozze/appunti.txt", "Testo locale");
+const listing = await VfsWidget.localVfs.list("bozze");
+const info = await VfsWidget.localVfs.stat("bozze/appunti.txt");
+const storage = await VfsWidget.localVfs.free(); // { quota, used, free, opfsUsed, usageDetails }
+const file = await VfsWidget.localVfs.readFile("bozze/appunti.txt");
+const selected = await VfsWidget.open("local:bozze");
+```
+
+L'API è esposta anche come `window.localVfs` e offre le stesse firme locali di
+`VfsWidget`: `list`, `upload`, `mkdir`, `rmfile`, `rmdir`, `rename` e
+`salvaFileTesto`, oltre a `readFile`, `fetch`, `stat` e `free`. `stat()` sulle
+directory restituisce anche dimensione ricorsiva e numero di file/cartelle;
+`free()` distingue l'uso complessivo dell'origine (`used`) da OPFS (`opfsUsed`). I dati OPFS sono
+privati per origine e possono essere rimossi dal browser cancellando i dati del sito.
+
 `open()` senza percorso mostra la root virtuale con i volumi disponibili.
 Il volume privato compare quando esiste una sessione OAuth; quello pubblico è
 sempre consultabile e rimane in sola lettura. La chiusura restituisce `null`.

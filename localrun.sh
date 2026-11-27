@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+VITE_FRONT_CONTROLLER_URL="https://belle.iliadboxos.it" \
+VITE_BACKEND_HOST="belle.iliadboxos.it" \
+
 cd "$(dirname "${BASH_SOURCE[0]}")"
 CLIENT_PORT="${CLIENT_PORT:-5173}"
 VITE_APP_BASE="${VITE_APP_BASE:-/fileserver/}"

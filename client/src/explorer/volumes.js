@@ -25,9 +25,19 @@ export function createVfsUrls(globalObject) {
   };
 }
 
-export function createVolumes(globalObject, getApi) {
+export function createVolumes(globalObject, getApi, localVfs) {
   const urls = createVfsUrls(globalObject);
   return {
+    ...(localVfs ? { local: {
+      writable: true,
+      available: () => true,
+      list: async (path) => normalize(await localVfs.list(path), "local"),
+      upload: (path, file) => localVfs.upload(path, file),
+      mkdir: (path) => localVfs.mkdir(path),
+      rename: (sourcePath, targetPath, type) => localVfs.rename(sourcePath, targetPath, type),
+      remove: (item) => item.type === "directory" ? localVfs.rmdir(item.path, { recursive: true }) : localVfs.rmfile(item.path),
+      fetch: (path) => localVfs.fetch(path),
+    } } : {}),
     private: {
       writable: true,
       available: () => Boolean(globalObject.VfsAuth?.getSession?.()),

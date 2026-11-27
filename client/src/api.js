@@ -17,31 +17,43 @@ function loadScript(src, globalName) {
 }
 
 export function initializeVfs() {
-  if (!initialization) initialization = loadScript('/auth/profile-widget.js', 'VfsAuth').then(() => loadScript('/vfs/widget.js', 'VfsWidget'));
+  if (!initialization) initialization = Promise.allSettled([
+    loadScript('/auth/profile-widget.js', 'VfsAuth'),
+    loadScript('/vfs/widget.js', 'VfsWidget'),
+  ]).then((results) => {
+    if (results[1].status === 'rejected') throw results[1].reason;
+    return { authAvailable: results[0].status === 'fulfilled', localAvailable: Boolean(window.VfsWidget?.localVfs) };
+  });
   return initialization;
 }
 
 export const getSession = () => window.VfsAuth?.getSession() || null;
-export const login = () => window.VfsAuth.login();
-export const logout = () => window.VfsAuth.logout();
-export const createDirectory = (path) => window.VfsWidget.mkdir(path);
-export const uploadFile = (path, file) => window.VfsWidget.upload(path, file);
+export const login = () => window.VfsAuth?.login?.();
+export const logout = () => window.VfsAuth?.logout?.();
+const apiFor = (volume) => volume === 'local' ? window.VfsWidget.localVfs : window.VfsWidget;
+export const createDirectory = (path, volume = 'private') => apiFor(volume).mkdir(path);
+export const uploadFile = (path, file, volume = 'private') => apiFor(volume).upload(path, file);
 
-export function deleteItem(item) {
+export function deleteItem(item, volume = 'private') {
+  const api = apiFor(volume);
   return item.type === 'directory'
-    ? window.VfsWidget.rmdir(item.path, { recursive: true })
-    : window.VfsWidget.rmfile(item.path);
+    ? api.rmdir(item.path, { recursive: true })
+    : api.rmfile(item.path);
 }
 
-export function renameItem(item, requestedName) {
+export function renameItem(item, requestedName, volume = 'private') {
   const name = validateEntryName(requestedName);
   const directory = parentDirectory(item.path);
   const targetPath = directory ? `${directory}/${name}` : name;
-  return window.VfsWidget.rename(item.path, targetPath, item.type);
+  return apiFor(volume).rename(item.path, targetPath, item.type);
 }
 
 export async function listDirectory(path = '') {
   return normalizeVfsListing(await window.VfsWidget.list(path));
+}
+
+export async function listLocalDirectory(path = '') {
+  return normalizeVfsListing(await window.VfsWidget.localVfs.list(path));
 }
 
 const vfsBase = () => String(window.VFS_BASE_URL || '/vfs').replace(/\/+$/, '');
@@ -76,6 +88,10 @@ export async function downloadFile(item) {
   await saveResponse(response, item.name);
 }
 
+export async function downloadLocalFile(item) {
+  await saveResponse(await window.VfsWidget.localVfs.fetch(item.path), item.name);
+}
+
 export async function downloadPublicFile(item) {
   await saveResponse(await fetch(publicFileUrl(item.path)), item.name);
 }
@@ -86,6 +102,10 @@ export async function loadFilePreview(item) {
     headers: { Authorization: `Bearer ${token}` },
   });
   return parsePreviewResponse(response, item);
+}
+
+export async function loadLocalFilePreview(item) {
+  return parsePreviewResponse(await window.VfsWidget.localVfs.fetch(item.path), item);
 }
 
 export async function loadPublicFilePreview(item) {
