@@ -22,11 +22,15 @@ export default function BreadcrumbStats({ volume, path, items }) {
   }, [volume, path, items]);
 
   const title = opfs
-    ? `${opfs.stat.files} file, ${opfs.stat.directories} cartelle, ${formatFileSize(opfs.stat.size)} · OPFS ${formatFileSize(opfs.free.opfsUsed)} · Liberi ${formatFileSize(opfs.free.free)}`
+    ? `${opfs.stat.files} file, ${opfs.stat.directories} cartelle · Contenuto ${formatFileSize(opfs.stat.size)} · OPFS ${formatFileSize(opfs.free.opfsUsed)} · Occupato origine ${formatFileSize(opfs.free.used)} · Libero ${formatFileSize(opfs.free.free)} · Quota ${formatFileSize(opfs.free.quota)}`
     : `${summary.files} file, ${summary.directories} cartelle, ${formatFileSize(summary.size)}`;
 
+  const visible = opfs
+    ? `${formatFileSize(opfs.free.opfsUsed)} usati · ${formatFileSize(opfs.free.free)} liberi`
+    : `${summary.files} file · ${summary.directories} cartelle · ${formatFileSize(summary.size)}`;
+
   return <span className="breadcrumb-stats" tabIndex={0} title={title} aria-label={`Statistiche: ${title}`}>
-    <span aria-hidden>ⓘ</span>
+    <span aria-hidden>ⓘ</span><span className="breadcrumb-stats-summary">{visible}</span>
     <span className="breadcrumb-stats-tooltip" role="tooltip">{title}</span>
   </span>;
 }

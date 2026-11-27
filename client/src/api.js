@@ -1,6 +1,5 @@
-import { normalizeVfsListing, parentDirectory, previewKindForEntry, validateEntryName } from './models';
-
-const MAX_TEXT_PREVIEW_BYTES = 5 * 1024 * 1024;
+import { normalizeVfsListing, parentDirectory, validateEntryName } from './models';
+import { parsePreviewResponse } from './preview.js';
 
 let initialization;
 
@@ -31,6 +30,7 @@ export const getSession = () => window.VfsAuth?.getSession() || null;
 export const login = () => window.VfsAuth?.login?.();
 export const logout = () => window.VfsAuth?.logout?.();
 const apiFor = (volume) => volume === 'local' ? window.VfsWidget.localVfs : window.VfsWidget;
+const previewSignal = () => typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(120000) : undefined;
 export const createDirectory = (path, volume = 'private') => apiFor(volume).mkdir(path);
 export const uploadFile = (path, file, volume = 'private') => apiFor(volume).upload(path, file);
 
@@ -100,6 +100,7 @@ export async function loadFilePreview(item) {
   const token = await window.VfsAuth.getAccessToken();
   const response = await fetch(window.VfsWidget.downloadUrl(item.path, false), {
     headers: { Authorization: `Bearer ${token}` },
+    signal: previewSignal(),
   });
   return parsePreviewResponse(response, item);
 }
@@ -109,32 +110,5 @@ export async function loadLocalFilePreview(item) {
 }
 
 export async function loadPublicFilePreview(item) {
-  return parsePreviewResponse(await fetch(publicFileUrl(item.path)), item);
-}
-
-async function parsePreviewResponse(response, item) {
-  if (!response.ok) throw new Error(`Anteprima non disponibile (${response.status})`);
-
-  const blob = await response.blob();
-  const kind = previewKindForEntry(item, response.headers.get('content-type') || blob.type);
-  if (kind === 'unsupported') {
-    throw new Error('Anteprima non supportata per questo tipo di file');
-  }
-
-  if (kind === 'text' || kind === 'json') {
-    if (blob.size > MAX_TEXT_PREVIEW_BYTES) {
-      throw new Error('Il file supera il limite di 5 MB per l’anteprima testuale');
-    }
-    const rawText = await blob.text();
-    if (kind === 'json') {
-      try {
-        return { kind, text: JSON.stringify(JSON.parse(rawText), null, 2), url: '' };
-      } catch {
-        return { kind, text: rawText, url: '', warning: 'JSON non valido: visualizzazione come testo.' };
-      }
-    }
-    return { kind, text: rawText, url: '' };
-  }
-
-  return { kind, text: '', url: URL.createObjectURL(blob) };
+  return parsePreviewResponse(await fetch(publicFileUrl(item.path), { signal: previewSignal() }), item);
 }

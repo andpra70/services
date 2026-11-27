@@ -36,8 +36,12 @@ export function formatFileSize(bytes = 0) {
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']);
 const TEXT_EXTENSIONS = new Set([
   'txt', 'json', 'md', 'csv', 'log', 'xml', 'html', 'htm', 'css', 'js', 'jsx',
-  'ts', 'tsx', 'yaml', 'yml', 'ini', 'conf', 'sh', 'sql',
+  'ts', 'tsx', 'mjs', 'cjs', 'mts', 'cts', 'yaml', 'yml', 'ini', 'conf', 'env',
+  'sh', 'bash', 'zsh', 'fish', 'sql', 'py', 'java', 'c', 'h', 'cpp', 'hpp', 'cs',
+  'go', 'rs', 'php', 'rb', 'toml', 'properties', 'dockerfile', 'gitignore', 'gcode', 'nc', 'tap',
 ]);
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus']);
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'm4v']);
 
 export function fileExtension(name = '') {
   const filename = String(name).toLowerCase();
@@ -51,7 +55,14 @@ export function previewKindForEntry(entry, contentType = '') {
 
   if (mime === 'application/pdf' || extension === 'pdf') return 'pdf';
   if (mime.startsWith('image/') || IMAGE_EXTENSIONS.has(extension)) return 'image';
+  if (mime.startsWith('audio/') || AUDIO_EXTENSIONS.has(extension)) return 'audio';
+  if (mime.startsWith('video/') || VIDEO_EXTENSIONS.has(extension)) return 'video';
   if (mime === 'application/json' || extension === 'json') return 'json';
   if (mime.startsWith('text/') || TEXT_EXTENSIONS.has(extension)) return 'text';
   return 'unsupported';
+}
+
+export function isTextPreviewEntry(entry) {
+  const extension = fileExtension(entry?.name);
+  return extension === 'json' || TEXT_EXTENSIONS.has(extension);
 }

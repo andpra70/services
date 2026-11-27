@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ContextMenu from '../ContextMenu';
 import BreadcrumbStats from '../BreadcrumbStats';
+import PreviewModal from '../PreviewModal';
+import { parsePreviewResponse } from '../../preview.js';
+import { isTextPreviewEntry } from '../../models.js';
 
 const parentPath = (path) => String(path || '').split('/').filter(Boolean).slice(0, -1).join('/');
 const formatSize = (bytes) => !bytes ? '—' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
@@ -17,6 +20,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
   const [dragDepth, setDragDepth] = useState(0);
   const [error, setError] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [history, setHistory] = useState(initialVolume ? [{ volume: initialVolume, path: initialPath }] : []);
   const [historyIndex, setHistoryIndex] = useState(initialVolume ? 0 : -1);
   const [saveName, setSaveName] = useState(options.suggestedName || '');
@@ -46,12 +50,13 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
     dialogRef.current?.focus();
     const keydown = (event) => {
       if (event.key !== 'Escape') return;
-      if (contextMenu) setContextMenu(null);
+      if (preview) closePreview();
+      else if (contextMenu) setContextMenu(null);
       else onResolve(null);
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [contextMenu]);
+  }, [contextMenu, preview]);
 
   const visibleItems = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -149,19 +154,27 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
       document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl);
     } catch (reason) { setError(reason?.message || 'Download non riuscito'); }
   };
-  const previewItem = async (item) => {
-    const preview = window.open('', '_blank');
+  const previewItem = async (item, editable = false) => {
+    closePreview();
+    setPreview({ item, editable, loading: true, error: '', kind: '', text: '', url: '' });
     try {
-      const response = await volumes[volume].fetch(item.path);
-      if (!response.ok) throw new Error(`Anteprima non disponibile (${response.status})`);
-      const objectUrl = URL.createObjectURL(await response.blob());
-      if (preview) preview.location.replace(objectUrl);
-      else window.open(objectUrl, '_blank', 'noopener');
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      const signal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(120000) : undefined;
+      const content = await parsePreviewResponse(await volumes[volume].fetch(item.path, { signal }), item);
+      setPreview((current) => current?.item.path === item.path ? { item, editable, loading: false, error: '', ...content } : current);
     } catch (reason) {
-      preview?.close();
-      setError(reason?.message || 'Anteprima non disponibile');
+      setPreview((current) => current?.item.path === item.path ? { ...current, loading: false, error: reason?.message || 'Anteprima non disponibile' } : current);
     }
+  };
+  const closePreview = () => setPreview((current) => {
+    if (current?.url) URL.revokeObjectURL(current.url);
+    return null;
+  });
+  const savePreviewText = async (item, text, contentType) => {
+    const directory = parentPath(item.path);
+    const file = new File([text], item.name, { type: contentType || 'text/plain' });
+    await volumes[volume].upload(directory, file);
+    await load(volume, path, false);
+    setPreview((current) => current ? { ...current, text, editable: true } : current);
   };
   const openContextMenu = (event, item = null) => {
     event.preventDefault();
@@ -171,6 +184,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
           item.type === 'directory'
             ? { id: 'open', icon: '↳', label: 'Apri', run: () => navigate(item) }
             : { id: 'preview', icon: '◉', label: 'Anteprima', run: () => previewItem(item) },
+          ...(item.type === 'file' && volumes[volume]?.writable && isTextPreviewEntry(item) ? [{ id: 'edit', icon: '✎', label: 'Modifica', run: () => previewItem(item, true) }] : []),
           ...(item.type === 'file' ? [{ id: 'download', icon: '⇩', label: 'Scarica', run: () => downloadItem(item) }] : []),
           ...(volumes[volume]?.writable && !item.virtual ? [{ id: 'separator', separator: true }, { id: 'delete', icon: '×', label: 'Elimina', danger: true, run: () => removeItem(item) }] : []),
         ]
@@ -211,7 +225,7 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
               <td>{item.type === 'directory' ? '📁' : '📄'} {item.name}</td>
               <td>{item.virtual ? 'Cartella virtuale' : item.type === 'directory' ? 'Cartella' : 'File'}</td>
               <td>{formatSize(item.size)}</td><td>{item.lastModified ? new Date(item.lastModified).toLocaleString() : '—'}</td>
-              <td><span className="vfs-actions">{item.type === 'directory' ? <button title={item.virtualKind === 'parent' ? 'Directory superiore' : item.virtualKind === 'current' ? 'Directory corrente' : 'Apri'} aria-label={`Apri ${item.name}`} onClick={(event) => { event.stopPropagation(); navigate(item); }}>↳</button> : <button title="Scarica" aria-label={`Scarica ${item.name}`} onClick={(event) => { event.stopPropagation(); downloadItem(item); }}>⇩</button>}{volumes[volume]?.writable && !item.virtual && <><button title="Rinomina" aria-label={`Rinomina ${item.name}`} onClick={(event) => { event.stopPropagation(); renameItem(item); }}>✎</button><button className="danger" title="Elimina" aria-label={`Elimina ${item.name}`} onClick={(event) => { event.stopPropagation(); removeItem(item); }}>×</button></>}</span></td>
+              <td><span className="vfs-actions">{item.type === 'directory' ? <button title={item.virtualKind === 'parent' ? 'Directory superiore' : item.virtualKind === 'current' ? 'Directory corrente' : 'Apri'} aria-label={`Apri ${item.name}`} onClick={(event) => { event.stopPropagation(); navigate(item); }}>↳</button> : <><button title="Scarica" aria-label={`Scarica ${item.name}`} onClick={(event) => { event.stopPropagation(); downloadItem(item); }}>⇩</button>{volumes[volume]?.writable && isTextPreviewEntry(item) && <button title="Modifica" aria-label={`Modifica ${item.name}`} onClick={(event) => { event.stopPropagation(); previewItem(item, true); }}>{'{}'}</button>}</>}{volumes[volume]?.writable && !item.virtual && <><button title="Rinomina" aria-label={`Rinomina ${item.name}`} onClick={(event) => { event.stopPropagation(); renameItem(item); }}>✎</button><button className="danger" title="Elimina" aria-label={`Elimina ${item.name}`} onClick={(event) => { event.stopPropagation(); removeItem(item); }}>×</button></>}</span></td>
             </tr>)}</tbody>
           </table>}
           {(loading || uploading) && <p className="vfs-status">{uploading ? 'Caricamento file…' : 'Caricamento…'}</p>}{error && <p className="vfs-error">{error}</p>}{volume && !loading && !uploading && !error && visibleItems.every((item) => item.virtual) && <p className="vfs-status">Directory vuota</p>}
@@ -220,5 +234,6 @@ export default function FileExplorerModal({ initialPath, initialVolume, options,
       </div>
       <footer>{options.mode === 'save' && <input value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="Nome file" />}<span>{selected?.path || (volume ? `${volume}:/${path}` : '')}</span><button onClick={() => onResolve(null)}>Annulla</button><button className="primary" disabled={!volume || (options.mode === 'file' && selected?.type !== 'file') || (options.mode === 'save' && (!saveName.trim() || !volumes[volume]?.writable))} onClick={confirm}>{options.mode === 'save' ? 'Salva qui' : options.mode === 'directory' ? 'Seleziona cartella' : 'Apri'}</button></footer>
     </section>
+    <PreviewModal preview={preview} onClose={closePreview} onDownload={downloadItem} onSave={savePreviewText} />
   </div>;
 }

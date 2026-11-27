@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { formatFileSize, parentDirectory } from '../models';
+import { formatFileSize, isTextPreviewEntry, parentDirectory } from '../models';
 import GlyphButton from './GlyphButton';
 import VolumeBreadcrumbs from './VolumeBreadcrumbs';
 import ContextMenu from './ContextMenu';
 
-export default function FileList({ volume, currentPath, items, loading, uploading, operationPath, error, onVolumeChange, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onDelete, onRename }) {
+export default function FileList({ volume, currentPath, items, loading, uploading, operationPath, error, onVolumeChange, onOpen, onRefresh, onUpload, onCreateDirectory, onDownload, onPreview, onEdit, onDelete, onRename }) {
   const picker = useRef(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: 'name', direction: 'asc' });
@@ -80,6 +80,7 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
           item.type === 'directory'
             ? { id: 'open', icon: '↳', label: 'Apri', disabled: busy, run: () => onOpen(item.path) }
             : { id: 'preview', icon: '◉', label: 'Anteprima', disabled: busy, run: () => onPreview(item) },
+          ...(!readOnly && item.type === 'file' && isTextPreviewEntry(item) ? [{ id: 'edit', icon: '✎', label: 'Modifica', disabled: busy, run: () => onEdit(item) }] : []),
           ...(item.type === 'file' ? [{ id: 'download', icon: '⇩', label: 'Scarica', disabled: busy, run: () => onDownload(item) }] : []),
           ...(!readOnly && !item.virtual ? [{ id: 'separator', separator: true }, { id: 'delete', icon: '×', label: 'Elimina', danger: true, disabled: busy, run: () => onDelete(item) }] : []),
         ]
@@ -135,6 +136,7 @@ export default function FileList({ volume, currentPath, items, loading, uploadin
                       ? <GlyphButton glyph="↳" label={`Apri ${item.name}`} onClick={() => onOpen(item.path)} disabled={operationPath === item.path} />
                       : <>
                         <GlyphButton glyph="◉" label={`Anteprima ${item.name}`} onClick={() => onPreview(item)} disabled={operationPath === item.path} />
+                        {!readOnly && isTextPreviewEntry(item) && <GlyphButton glyph="{ }" label={`Modifica ${item.name}`} onClick={() => onEdit(item)} disabled={operationPath === item.path} />}
                         <GlyphButton glyph="⇩" label={`Scarica ${item.name}`} onClick={() => onDownload(item)} disabled={operationPath === item.path} />
                       </>}
                     {!readOnly && !item.virtual && <GlyphButton glyph="✎" label={`Rinomina ${item.name}`} onClick={() => onRename(item)} disabled={operationPath === item.path} />}

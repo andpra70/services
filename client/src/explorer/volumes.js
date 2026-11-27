@@ -46,9 +46,9 @@ export function createVolumes(globalObject, getApi, localVfs) {
       mkdir: (path) => getApi().mkdir(path),
       rename: (sourcePath, targetPath, type) => getApi().rename(sourcePath, targetPath, type),
       remove: (item) => item.type === "directory" ? getApi().rmdir(item.path, { recursive: true }) : getApi().rmfile(item.path),
-      async fetch(path) {
+      async fetch(path, options) {
         const token = await globalObject.VfsAuth.getAccessToken();
-        return fetch(getApi().downloadUrl(path, false), { headers: { Authorization: `Bearer ${token}` } });
+        return fetch(getApi().downloadUrl(path, false), { ...options, headers: { ...(options?.headers || {}), Authorization: `Bearer ${token}` } });
       },
     },
     public: {
@@ -62,8 +62,8 @@ export function createVolumes(globalObject, getApi, localVfs) {
         listing.items = listing.items.map((item) => item.type === "file" ? { ...item, url: urls.publicFile(item.path) } : item);
         return listing;
       },
-      fetch(path) {
-        return fetch(urls.publicFile(path));
+      fetch(path, options) {
+        return fetch(urls.publicFile(path), options);
       },
     },
   };

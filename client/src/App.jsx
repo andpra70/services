@@ -119,13 +119,21 @@ export default function App() {
   }
 
   async function handlePreview(item) {
+    return openPreview(item, false);
+  }
+
+  async function handleEdit(item) {
+    return openPreview(item, true);
+  }
+
+  async function openPreview(item, editable) {
     closePreview();
-    setPreview({ item, loading: true, error: '', kind: '', text: '', url: '' });
+    setPreview({ item, editable, loading: true, error: '', kind: '', text: '', url: '' });
     try {
       const content = await (volume === 'public' ? loadPublicFilePreview(item) : volume === 'local' ? loadLocalFilePreview(item) : loadFilePreview(item));
       setPreview((current) => {
         if (current?.item.path === item.path) {
-          return { item, loading: false, error: '', ...content };
+          return { item, editable, loading: false, error: '', ...content };
         }
         if (content.url) URL.revokeObjectURL(content.url);
         return current;
@@ -135,6 +143,14 @@ export default function App() {
         ? { ...current, loading: false, error: err.message || 'Anteprima non disponibile' }
         : current);
     }
+  }
+
+  async function handleSaveText(item, text, contentType) {
+    const directory = item.path.split('/').filter(Boolean).slice(0, -1).join('/');
+    const file = new File([text], item.name, { type: contentType || 'text/plain' });
+    await uploadFile(directory, file, volume);
+    await refresh(currentPath, volume);
+    setPreview((current) => current ? { ...current, text, editable: true } : current);
   }
 
   async function handleDelete(item) {
@@ -200,11 +216,12 @@ export default function App() {
           onCreateDirectory={handleCreateDirectory}
           onDownload={handleDownload}
           onPreview={handlePreview}
+          onEdit={handleEdit}
           onDelete={handleDelete}
           onRename={handleRename}
         />
       )}
-      <PreviewModal preview={preview} onClose={closePreview} onDownload={handleDownload} />
+      <PreviewModal preview={preview} onClose={closePreview} onDownload={handleDownload} onSave={handleSaveText} />
     </div>
   );
 }
